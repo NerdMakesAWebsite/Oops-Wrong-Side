@@ -1,0 +1,2444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oops! Wrong Side</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* =============================================================
+       BASE RESET & ROOT VARIABLES
+    ============================================================= */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-main: #e8dcc4;
+      --bg-dark: #c9b896;
+      --lane-color: #f5f0e6;
+      --lane-alt: #ebe4d5;
+      --text-main: #2d2416;
+      --accent-warn: #d94e28;
+      --accent-safe: #4a7c59;
+      --accent-info: #3a5f8f;
+      --accent-locked: #8a8a8a;
+      --accent-boss: #d4a028;
+      --tile-size: 70px;
+      --shadow: rgba(45,36,22,0.15);
+    }
+
+    @media (max-width: 768px) { :root { --tile-size: 50px; } }
+
+    /* =============================================================
+       WORLD THEMES — scoped to game area only.
+       Mall & Airport use CSS vars (safe for all screens).
+       Hotel overrides are limited to #game-container children
+       so menus, almanac, and level select are NEVER tinted.
+    ============================================================= */
+    body.world-mall {
+      --bg-main: #f0deff;
+      --bg-dark: #d9b8f5;
+      --lane-color: #fdf0ff;
+      --lane-alt: #f7e5fd;
+      --text-main: #2d1040;
+      --shadow: rgba(45,16,64,0.15);
+    }
+    body.world-airport {
+      --bg-main: #d8eeff;
+      --bg-dark: #aed0f0;
+      --lane-color: #edf6ff;
+      --lane-alt: #dceeff;
+      --text-main: #0d2040;
+      --shadow: rgba(13,32,64,0.15);
+    }
+    /* Hotel: ONLY styles gameplay elements — never bleeds into menus */
+    body.world-hotel #game-board {
+      background: #1a0d2e;
+      border-color: #7030a0;
+    }
+    body.world-hotel .game-field-wrapper {
+      background: #120820;
+    }
+    body.world-hotel #lanes-container .lane {
+      background: #2e1a4a;
+      border-color: #5a2a80;
+    }
+    body.world-hotel #lanes-container .lane:nth-child(even) {
+      background: #261540;
+    }
+    body.world-hotel #lanes-container .tile {
+      background: rgba(100,50,160,0.2);
+      border-color: rgba(150,80,200,0.3);
+    }
+    body.world-hotel #lanes-container .tile:hover:not(.broken) {
+      background: rgba(120,60,180,0.45);
+      border-color: #c040e0;
+    }
+    body.world-hotel .top-bar {
+      background: linear-gradient(135deg, #2d1a4a, #1a0d2e);
+      border-bottom-color: #7030a0;
+    }
+    body.world-hotel .top-bar .stat-item { color: #e0c0ff; }
+    body.world-hotel .top-bar .stat-value { color: #c890ff; }
+    body.world-hotel .top-bar .world-indicator { color: #e0c0ff; border-color: #7030a0; background: rgba(60,20,90,0.5); }
+    body.world-hotel .icon-btn { background: #3d1a5e; border-color: #7030a0; color: #e0c0ff; }
+    body.world-hotel .tower-bar { background: linear-gradient(135deg, #2d1a4a, #1a0d2e); border-top-color: #7030a0; }
+    body.world-hotel .tower-btn { background: #3d1a5e; border-color: #7030a0; color: #e0c0ff; }
+    body.world-hotel .tower-btn .tower-name { color: #e0c0ff; }
+    body.world-hotel .tower-btn .tower-cost { color: #c040e0; }
+    body.world-hotel .tower-btn.selected { background: #7030a0; color: #fff; }
+    body.world-hotel .tower-btn.disabled { opacity: 0.35; }
+
+    /* =============================================================
+       BODY & BACKGROUND
+    ============================================================= */
+    body {
+      font-family: 'Courier Prime', monospace;
+      background: linear-gradient(135deg, var(--bg-main) 0%, var(--bg-dark) 100%);
+      color: var(--text-main);
+      overflow-x: hidden;
+      min-height: 100vh;
+      position: relative;
+      transition: background 0.6s ease;
+    }
+    .bg-animation { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; opacity: 0.1; }
+    .bg-enemy { position: absolute; font-size: 3rem; animation: walkWrong 20s linear infinite; }
+    @keyframes walkWrong {
+      0%   { left: -5%; transform: scaleX(-1); }
+      48%  { transform: scaleX(-1); }
+      50%  { transform: scaleX(1); }
+      98%  { transform: scaleX(1); }
+      100% { left: 105%; transform: scaleX(-1); }
+    }
+
+    /* =============================================================
+       SCREENS
+    ============================================================= */
+    .screen { display: none; min-height: 100vh; padding: 20px; position: relative; z-index: 1; }
+    .screen.active { display: flex; flex-direction: column; animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* =============================================================
+       MAIN MENU
+    ============================================================= */
+    .menu-container { text-align: center; max-width: 600px; width: 100%; margin: auto; }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(3rem, 10vw, 6rem);
+      color: var(--accent-warn);
+      text-shadow: 4px 4px 0 var(--shadow);
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+      animation: logoWiggle 2s ease-in-out infinite;
+    }
+    @keyframes logoWiggle { 0%,100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
+    .subtitle { font-size: clamp(0.9rem, 2.5vw, 1.2rem); text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 40px; opacity: 0.7; }
+
+    .menu-btn {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(1.3rem, 3.5vw, 1.8rem);
+      padding: 18px 35px;
+      margin: 8px;
+      background: white;
+      color: var(--text-main);
+      border: 4px solid var(--text-main);
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      box-shadow: 5px 5px 0 var(--shadow);
+      transition: all 0.2s ease;
+      min-width: 240px;
+      display: inline-block;
+    }
+    .menu-btn:hover:not(.disabled) { transform: translateY(-3px); box-shadow: 7px 7px 0 var(--shadow); }
+    .menu-btn:active { transform: translateY(0); box-shadow: 3px 3px 0 var(--shadow); }
+    .menu-btn.primary { background: var(--accent-safe); color: white; }
+    .menu-btn.special { background: var(--accent-boss); color: white; animation: glow 2s ease-in-out infinite; }
+    @keyframes glow {
+      0%,100% { box-shadow: 5px 5px 0 var(--shadow); }
+      50% { box-shadow: 5px 5px 20px rgba(212,160,40,0.6); }
+    }
+    .menu-btn.disabled { opacity: 0.4; cursor: not-allowed; background: #d0d0d0; }
+
+    /* =============================================================
+       LEVEL SELECT & WORLD SECTIONS
+    ============================================================= */
+    .level-select-container { max-width: 1100px; width: 100%; margin: auto; }
+    .page-header { text-align: center; margin-bottom: 30px; }
+    .page-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(2rem, 6vw, 3.5rem); color: var(--accent-warn); text-shadow: 3px 3px 0 var(--shadow); }
+
+    .world-section { margin-bottom: 30px; }
+    .world-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 3px solid var(--text-main);
+      margin-bottom: 12px;
+      box-shadow: 4px 4px 0 var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .world-header.locked { opacity: 0.5; background: #ccc !important; }
+    .world-header-icon { font-size: 2.2rem; }
+    .world-header-text { flex: 1; }
+    .world-header-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; }
+    .world-header-range { font-size: 0.8rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.1em; }
+    .world-lock-badge { font-size: 1.8rem; }
+    .world-unlock-msg { font-size: 0.75rem; font-style: italic; opacity: 0.7; margin-top: 2px; }
+
+    /* World header colors */
+    .world-office  { background: linear-gradient(135deg, #f5f0e6, #e8dcc4); }
+    .world-mall    { background: linear-gradient(135deg, #fce4ff, #e8c0ff); }
+    .world-airport { background: linear-gradient(135deg, #ddf0ff, #b8d8f8); }
+    .world-hotel   { background: linear-gradient(135deg, #3d1a5e, #1a0a30); color: #e0c0ff; border-color: #7030a0; }
+
+    .level-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+      padding: 8px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 8px;
+    }
+    @media (max-width: 768px) { .level-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; } }
+
+    .level-card {
+      aspect-ratio: 1;
+      background: white;
+      border: 3px solid var(--text-main);
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 3px 3px 0 var(--shadow);
+      transition: all 0.2s ease;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+    }
+    .level-card:hover:not(.locked) { transform: translateY(-3px); box-shadow: 5px 5px 0 var(--shadow); }
+    .level-card.completed { background: linear-gradient(135deg, #d4f4dd 0%, #b8e6c3 100%); }
+    .level-card.boss { background: linear-gradient(135deg, #ffd4a3 0%, #ffb366 100%); border-color: var(--accent-boss); }
+    .level-card.locked { background: #d0d0d0; opacity: 0.6; cursor: not-allowed; }
+    .level-card.world-locked { background: #c0c0c0; opacity: 0.4; cursor: not-allowed; }
+    .level-number { font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.1rem, 2.5vw, 1.6rem); color: var(--text-main); }
+    .level-icon { font-size: clamp(1.2rem, 2.5vw, 1.7rem); margin-top: 2px; }
+    .level-stars { font-size: 0.7rem; margin-top: 2px; }
+
+    /* =============================================================
+       LOADOUT SCREEN
+    ============================================================= */
+    .loadout-container { max-width: 900px; width: 100%; margin: auto; }
+    .level-preview { background: white; border: 3px solid var(--text-main); border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 5px 5px 0 var(--shadow); }
+    .preview-title { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--accent-info); margin-bottom: 10px; }
+    .defense-selection { background: white; border: 3px solid var(--text-main); border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 5px 5px 0 var(--shadow); }
+    .section-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; color: var(--accent-warn); margin-bottom: 15px; text-transform: uppercase; }
+
+    .defense-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    @media (max-width: 768px) { .defense-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .defense-item {
+      aspect-ratio: 1;
+      background: white;
+      border: 3px solid var(--text-main);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 3px 3px 0 var(--shadow);
+      position: relative;
+    }
+    .defense-item:hover:not(.locked):not(.in-loadout) { transform: translateY(-2px); box-shadow: 4px 4px 0 var(--shadow); }
+    .defense-item.locked { opacity: 0.4; cursor: not-allowed; background: #e0e0e0; }
+    .defense-item.in-loadout { background: var(--accent-info); color: white; border-color: var(--accent-info); }
+    .defense-icon { font-size: clamp(1.8rem, 4vw, 2.2rem); }
+    .defense-name { font-size: clamp(0.5rem, 1.2vw, 0.65rem); text-transform: uppercase; font-weight: bold; margin-top: 4px; text-align: center; }
+    .defense-cost { font-size: 0.7rem; color: var(--accent-warn); font-weight: bold; }
+    .lock-badge { position: absolute; top: 5px; right: 5px; font-size: 1rem; }
+
+    .loadout-slots { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 15px; background: var(--lane-color); border-radius: 6px; min-height: 100px; }
+    .loadout-slot { width: 80px; height: 80px; border: 3px dashed var(--text-main); border-radius: 6px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.5); font-size: 2rem; position: relative; cursor: pointer; }
+    .loadout-slot.filled { background: white; border-style: solid; }
+    .slot-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: var(--accent-warn); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; cursor: pointer; border: 2px solid var(--text-main); }
+
+    /* =============================================================
+       ALMANAC
+    ============================================================= */
+    .almanac-container { max-width: 900px; width: 100%; margin: auto; display: flex; flex-direction: column; height: calc(100vh - 40px); }
+    .almanac-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
+    .almanac-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; padding: 12px 25px; background: white; border: 3px solid var(--text-main); border-radius: 8px 8px 0 0; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.2s ease; white-space: nowrap; }
+    .almanac-tab.active { background: var(--accent-info); color: white; transform: translateY(3px); }
+    .almanac-content { flex: 1; background: white; border: 3px solid var(--text-main); border-radius: 8px; padding: 20px; overflow-y: auto; box-shadow: 5px 5px 0 var(--shadow); }
+    .almanac-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; }
+    @media (max-width: 768px) { .almanac-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    .almanac-item { aspect-ratio: 1; background: var(--lane-color); border: 3px solid var(--text-main); border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; transition: all 0.2s ease; box-shadow: 3px 3px 0 var(--shadow); position: relative; }
+    .almanac-item:hover:not(.locked) { transform: translateY(-3px); box-shadow: 5px 5px 0 var(--shadow); }
+    .almanac-item.locked { opacity: 0.4; background: #e0e0e0; }
+    .almanac-item-icon { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 5px; }
+    .almanac-item-name { font-size: clamp(0.6rem, 1.5vw, 0.8rem); text-align: center; font-weight: bold; text-transform: uppercase; }
+
+    .almanac-detail { display: none; padding: 20px; }
+    .almanac-detail.active { display: block; animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .detail-header { text-align: center; margin-bottom: 30px; }
+    .detail-icon { font-size: 5rem; margin-bottom: 15px; }
+    .detail-title { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--accent-info); margin-bottom: 10px; }
+    .detail-category { display: inline-block; padding: 5px 15px; background: var(--accent-safe); color: white; border-radius: 20px; font-size: 0.9rem; text-transform: uppercase; font-weight: bold; }
+    .detail-section { background: var(--lane-color); padding: 15px; border-radius: 6px; margin-bottom: 15px; }
+    .detail-label { font-weight: bold; text-transform: uppercase; font-size: 0.9rem; color: var(--accent-warn); margin-bottom: 8px; }
+    .detail-text { line-height: 1.6; }
+    .detail-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat-box { background: white; padding: 10px; border-radius: 6px; border: 2px solid var(--text-main); text-align: center; }
+    .stat-label { font-size: 0.8rem; text-transform: uppercase; opacity: 0.7; }
+
+    .almanac-world-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+    .almanac-world-card { padding: 20px; border-radius: 10px; border: 3px solid var(--text-main); cursor: pointer; transition: all 0.2s ease; box-shadow: 4px 4px 0 var(--shadow); }
+    .almanac-world-card:hover:not(.locked) { transform: translateY(-3px); box-shadow: 6px 6px 0 var(--shadow); }
+    .almanac-world-card.locked { opacity: 0.4; cursor: not-allowed; }
+    .almanac-world-card-icon { font-size: 3rem; margin-bottom: 10px; }
+    .almanac-world-card-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; }
+    .almanac-world-card-range { font-size: 0.8rem; opacity: 0.7; }
+
+    /* =============================================================
+       GAMEPLAY SCREEN
+    ============================================================= */
+    #gameplay-screen { padding: 0; }
+    #game-container { width: 100%; max-width: 100vw; display: flex; flex-direction: column; height: 100vh; }
+
+    .top-bar {
+      background: linear-gradient(135deg, #fff 0%, #f5f0e6 100%);
+      padding: 12px 15px;
+      border-bottom: 3px solid var(--text-main);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      z-index: 100;
+    }
+    body.world-mall .top-bar { background: linear-gradient(135deg, #f8e8ff, #ecd0ff); }
+    body.world-airport .top-bar { background: linear-gradient(135deg, #e8f4ff, #d0e8ff); }
+
+    .stats-group { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+    .stat-item { font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; font-size: clamp(0.7rem, 1.8vw, 0.9rem); }
+    .stat-value { color: var(--accent-info); font-size: clamp(0.9rem, 2.2vw, 1.2rem); margin-left: 3px; }
+    .controls-group { display: flex; gap: 8px; }
+    .icon-btn { width: 40px; height: 40px; border: 3px solid var(--text-main); border-radius: 6px; background: white; cursor: pointer; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; box-shadow: 3px 3px 0 var(--shadow); }
+    .icon-btn:hover { transform: translateY(-2px); box-shadow: 4px 4px 0 var(--shadow); }
+    .icon-btn.active { background: var(--accent-info); color: white; }
+
+    .world-indicator { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; padding: 4px 12px; border-radius: 20px; border: 2px solid var(--text-main); background: rgba(255,255,255,0.5); }
+
+    .game-field-wrapper { flex: 1; overflow: auto; background: var(--bg-dark); padding: 15px; position: relative; }
+    #game-board { max-width: 1200px; margin: 0 auto; background: var(--bg-dark); padding: 25px; border-radius: 12px; border: 4px solid var(--text-main); box-shadow: 8px 8px 0 var(--shadow); position: relative; transition: background 0.6s ease; }
+
+    .goal-marker, .spawn-marker { position: absolute; top: 50%; transform: translateY(-50%); font-size: clamp(2rem, 5vw, 3rem); animation: pulse 2s ease-in-out infinite; }
+    .goal-marker { left: 10px; }
+    .spawn-marker { right: 10px; opacity: 0.6; }
+    @keyframes pulse { 0%,100% { transform: translateY(-50%) scale(1); } 50% { transform: translateY(-50%) scale(1.1); } }
+
+    #lanes-container { display: flex; flex-direction: column; gap: 6px; }
+    .lane { display: flex; gap: 3px; background: var(--lane-color); padding: 4px; border-radius: 6px; border: 2px solid var(--text-main); position: relative; min-height: calc(var(--tile-size) + 8px); transition: background 0.4s ease; }
+    .lane:nth-child(even) { background: var(--lane-alt); }
+
+    .tile { width: var(--tile-size); height: var(--tile-size); min-width: var(--tile-size); background: rgba(255,255,255,0.5); border: 2px dashed rgba(45,36,22,0.2); border-radius: 4px; position: relative; cursor: pointer; transition: all 0.15s ease; }
+    .tile:hover:not(.broken) { background: rgba(255,255,255,0.8); border-color: var(--accent-info); transform: scale(1.05); }
+    .tile.broken { background: repeating-linear-gradient(45deg, rgba(217,78,40,0.1), rgba(217,78,40,0.1) 10px, transparent 10px, transparent 20px); cursor: not-allowed; }
+
+    .tower { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: clamp(1.5rem, 4vw, 2rem); animation: plop 0.3s ease; }
+    @keyframes plop { 0% { transform: scale(0) rotate(-180deg); } 60% { transform: scale(1.2) rotate(10deg); } 100% { transform: scale(1) rotate(0deg); } }
+
+    /* =============================================================
+       ENEMIES
+    ============================================================= */
+    .enemy { width: clamp(40px, 8vw, 50px); height: clamp(40px, 8vw, 50px); position: absolute; display: flex; align-items: center; justify-content: center; font-size: clamp(1.5rem, 3vw, 1.8rem); transition: left 0.5s linear; z-index: 10; animation: wobble 0.5s ease-in-out infinite alternate; }
+    @keyframes wobble { 0% { transform: translateY(0) rotate(-3deg); } 100% { transform: translateY(-3px) rotate(3deg); } }
+    .enemy.confused { animation: confused 0.8s ease-in-out infinite; }
+    @keyframes confused { 0%,100% { transform: rotate(-15deg) scale(1); } 50% { transform: rotate(15deg) scale(1.1); } }
+    .enemy.panicked { animation: panic 0.3s ease-in-out infinite; }
+    @keyframes panic { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px) rotate(-10deg); } 75% { transform: translateX(5px) rotate(10deg); } }
+    .enemy.phasing { opacity: 0.5; animation: phase 1s ease-in-out infinite; }
+    @keyframes phase { 0%,100% { opacity: 0.4; transform: scale(0.95); } 50% { opacity: 0.8; transform: scale(1.05); } }
+    .mood-icon { position: absolute; top: -12px; right: -5px; font-size: 0.8rem; }
+    .health-bar { position: absolute; bottom: -4px; left: 4px; right: 4px; height: 4px; background: rgba(0,0,0,0.2); border-radius: 2px; overflow: hidden; }
+    .health-fill { height: 100%; background: var(--accent-safe); transition: width 0.3s ease; }
+    .boss-health { height: 6px; }
+    .boss-health .health-fill { background: var(--accent-boss); }
+
+    /* =============================================================
+       TOWER BAR
+    ============================================================= */
+    .tower-bar { background: linear-gradient(135deg, #fff 0%, #f5f0e6 100%); padding: 12px; border-top: 3px solid var(--text-main); overflow-x: auto; }
+    body.world-mall .tower-bar { background: linear-gradient(135deg, #f8e8ff, #ecd0ff); }
+    body.world-airport .tower-bar { background: linear-gradient(135deg, #e8f4ff, #d0e8ff); }
+    .tower-bar-scroll { display: flex; gap: 8px; min-width: min-content; }
+    .tower-btn { background: white; border: 3px solid var(--text-main); border-radius: 6px; padding: 12px 8px; cursor: pointer; transition: all 0.2s ease; text-align: center; box-shadow: 3px 3px 0 var(--shadow); min-width: 75px; }
+    .tower-btn:hover:not(.disabled) { transform: translateY(-2px); box-shadow: 4px 4px 0 var(--shadow); }
+    .tower-btn.selected { background: var(--accent-info); color: white; }
+    .tower-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+    .tower-icon { font-size: clamp(1.6rem, 3.5vw, 2rem); margin-bottom: 3px; }
+    .tower-name { font-size: clamp(0.55rem, 1.3vw, 0.65rem); text-transform: uppercase; font-weight: bold; }
+    .tower-cost { font-size: clamp(0.65rem, 1.4vw, 0.75rem); color: var(--accent-warn); margin-top: 2px; font-weight: bold; }
+
+    /* =============================================================
+       OVERLAYS
+    ============================================================= */
+    .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeIn 0.3s ease; }
+    .overlay.active { display: flex; }
+    .overlay-content { background: white; border: 4px solid var(--text-main); border-radius: 12px; padding: 35px; text-align: center; box-shadow: 10px 10px 0 var(--shadow); max-width: 450px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .overlay-title { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--accent-warn); margin-bottom: 25px; }
+    .overlay-buttons { display: flex; flex-direction: column; gap: 12px; }
+
+    /* =============================================================
+       RESULTS SCREEN
+    ============================================================= */
+    .results-container { max-width: 550px; width: 100%; margin: auto; }
+    .results-box { background: white; border: 4px solid var(--text-main); border-radius: 12px; padding: 35px; box-shadow: 8px 8px 0 var(--shadow); text-align: center; }
+    .results-title { font-family: 'Bebas Neue', sans-serif; font-size: 3rem; color: var(--accent-safe); margin-bottom: 20px; }
+    .results-title.defeat { color: var(--accent-warn); }
+    .stars-display { font-size: 3.5rem; margin: 20px 0; letter-spacing: 8px; }
+    .unlock-notification { background: var(--accent-boss); color: white; padding: 15px; border-radius: 8px; margin: 10px 0; font-weight: bold; animation: glow 2s ease-in-out infinite; }
+    .unlock-notification .unlock-icon { font-size: 2rem; margin-bottom: 8px; }
+    .results-stats { background: var(--lane-color); padding: 18px; border-radius: 8px; margin: 20px 0; }
+    .result-stat { display: flex; justify-content: space-between; margin: 10px 0; font-size: 1.1rem; font-weight: bold; }
+    .result-value { color: var(--accent-info); }
+
+    /* =============================================================
+       MISC
+    ============================================================= */
+    .back-btn { position: fixed; top: 20px; left: 20px; z-index: 100; }
+    .floating-text { position: absolute; pointer-events: none; font-weight: bold; animation: floatUp 1s ease-out forwards; z-index: 100; }
+    @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-40px) scale(1.3); opacity: 0; } }
+    .stat-value-display { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; color: var(--accent-info); }
+
+    .coming-soon-box { text-align: center; padding: 60px 40px; max-width: 500px; margin: auto; background: white; border: 4px solid var(--text-main); border-radius: 12px; box-shadow: 8px 8px 0 var(--shadow); }
+    .coming-soon-icon { font-size: 4rem; margin-bottom: 20px; }
+    .coming-soon-title { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: var(--accent-warn); margin-bottom: 10px; }
+    .coming-soon-text { opacity: 0.7; line-height: 1.6; }
+
+    @media (max-width: 768px) {
+      .menu-btn { min-width: 180px; padding: 14px 25px; }
+      .overlay-content { padding: 25px 18px; }
+      .almanac-world-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background animation -->
+  <div class="bg-animation" id="bg-animation"></div>
+
+  <!-- ==================== MAIN MENU ==================== -->
+  <div id="main-menu" class="screen active">
+    <div class="menu-container">
+      <h1 class="logo">OOPS!<br>WRONG SIDE</h1>
+      <p class="subtitle">A Directional Defense Game</p>
+      <button class="menu-btn primary" onclick="showScreen('level-select')">📍 PLAY LEVELS</button>
+      <button class="menu-btn" onclick="showScreen('endless-menu')">♾️ ENDLESS MODE</button>
+      <button class="menu-btn" id="mini-games-btn" onclick="showScreen('mini-games')">🎮 MINI GAMES</button>
+      <button class="menu-btn" onclick="showScreen('almanac')">📖 ALMANAC</button>
+      <button class="menu-btn" id="chaos-mode-btn" onclick="showScreen('chaos-menu')">🌪️ CHAOS MODE</button>
+      <button class="menu-btn" onclick="alert('Settings: Coming soon!')">⚙️ SETTINGS</button>
+    </div>
+  </div>
+
+  <!-- ==================== LEVEL SELECT ==================== -->
+  <div id="level-select" class="screen">
+    <button class="menu-btn back-btn" onclick="showScreen('main-menu')">⬅️ BACK</button>
+    <div class="level-select-container">
+      <div class="page-header">
+        <h2 class="page-title">SELECT LEVEL</h2>
+      </div>
+      <div id="world-sections"></div>
+    </div>
+  </div>
+
+  <!-- ==================== LOADOUT ==================== -->
+  <div id="loadout-screen" class="screen">
+    <button class="menu-btn back-btn" onclick="showScreen('level-select')">⬅️ BACK</button>
+    <div class="loadout-container">
+      <div class="page-header">
+        <h2 class="page-title" id="loadout-level-title">LEVEL 1</h2>
+      </div>
+      <div class="level-preview">
+        <div class="preview-title">Level Info</div>
+        <p id="level-info-text">Waves: 5 | Starting Points: 100</p>
+      </div>
+      <div class="defense-selection">
+        <div class="section-label">Choose Your Defenses</div>
+        <div class="defense-grid" id="available-defenses"></div>
+      </div>
+      <div class="defense-selection">
+        <div class="section-label">Your Loadout (<span id="loadout-count">0</span>/<span id="loadout-max">6</span>)</div>
+        <div class="loadout-slots" id="loadout-slots"></div>
+      </div>
+      <div style="text-align:center;margin-top:20px;">
+        <button class="menu-btn primary" onclick="startGameFromLoadout()">START LEVEL ▶️</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== ALMANAC ==================== -->
+  <div id="almanac" class="screen">
+    <button class="menu-btn back-btn" onclick="closeAlmanac()">⬅️ BACK</button>
+    <div class="almanac-container">
+      <div class="page-header">
+        <h2 class="page-title">ALMANAC</h2>
+      </div>
+      <div class="almanac-tabs">
+        <button class="almanac-tab active" onclick="switchAlmanacTab('defenses')">DEFENSES</button>
+        <button class="almanac-tab" onclick="switchAlmanacTab('enemies')">ENEMIES</button>
+        <button class="almanac-tab" onclick="switchAlmanacTab('bosses')">BOSSES</button>
+        <button class="almanac-tab" onclick="switchAlmanacTab('worlds')">WORLDS</button>
+        <button class="almanac-tab" onclick="switchAlmanacTab('mechanics')">MECHANICS</button>
+      </div>
+      <div class="almanac-content" id="almanac-content"></div>
+    </div>
+  </div>
+
+  <!-- ==================== GAMEPLAY ==================== -->
+  <div id="gameplay-screen" class="screen">
+    <div id="game-container">
+      <div class="top-bar">
+        <div class="stats-group">
+          <div class="stat-item">💰 <span class="stat-value" id="points">100</span></div>
+          <div class="stat-item">🌊 <span class="stat-value" id="wave-display">1/5</span></div>
+          <div class="stat-item">❤️ <span class="stat-value" id="lives">10</span></div>
+          <div class="stat-item">⭐ <span class="stat-value" id="score">0</span></div>
+          <div class="world-indicator" id="world-indicator">🏢 World 1</div>
+        </div>
+        <div class="controls-group">
+          <button class="icon-btn" id="speed-btn" onclick="game?.toggleSpeed()" title="Speed">1×</button>
+          <button class="icon-btn" onclick="game?.pause()" title="Pause">⏸</button>
+        </div>
+      </div>
+      <div class="game-field-wrapper">
+        <div id="game-board">
+          <div class="goal-marker" id="goal-marker">🚪</div>
+          <div class="spawn-marker" id="spawn-marker">➡️</div>
+          <div id="lanes-container"></div>
+        </div>
+      </div>
+      <div class="tower-bar">
+        <div class="tower-bar-scroll" id="tower-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RESULTS ==================== -->
+  <div id="results-screen" class="screen">
+    <div class="results-container">
+      <div class="results-box">
+        <h2 class="results-title" id="results-title">VICTORY!</h2>
+        <div class="stars-display" id="stars-display">⭐⭐⭐</div>
+        <div id="unlock-notification-container"></div>
+        <div class="results-stats">
+          <div class="result-stat"><span>Final Score:</span><span class="result-value" id="final-score">0</span></div>
+          <div class="result-stat"><span>Enemies Defeated:</span><span class="result-value" id="enemies-defeated">0</span></div>
+          <div class="result-stat"><span>😕 Confused:</span><span class="result-value" id="confused-count">0</span></div>
+          <div class="result-stat"><span>😱 Panicked:</span><span class="result-value" id="panicked-count">0</span></div>
+        </div>
+        <div class="overlay-buttons">
+          <button class="menu-btn primary" onclick="game?.nextLevel()">NEXT LEVEL ▶️</button>
+          <button class="menu-btn" onclick="game?.replay()">🔄 REPLAY</button>
+          <button class="menu-btn" onclick="showScreen('level-select')">⬅️ LEVEL SELECT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PAUSE OVERLAY ==================== -->
+  <div id="pause-overlay" class="overlay">
+    <div class="overlay-content">
+      <h2 class="overlay-title">PAUSED</h2>
+      <div class="overlay-buttons">
+        <button class="menu-btn primary" onclick="game?.resume()">▶️ RESUME</button>
+        <button class="menu-btn" onclick="showScreen('almanac', 'from-game')">📖 ALMANAC</button>
+        <button class="menu-btn" onclick="game?.restart()">🔄 RESTART</button>
+        <button class="menu-btn" onclick="game?.quitToMenu()">⬅️ QUIT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PLACEHOLDER SCREENS ==================== -->
+  <div id="endless-menu" class="screen">
+    <button class="menu-btn back-btn" onclick="showScreen('main-menu')">⬅️ BACK</button>
+    <div class="coming-soon-box" style="margin:auto;">
+      <div class="coming-soon-icon">♾️</div>
+      <div class="coming-soon-title">ENDLESS MODE</div>
+      <p class="coming-soon-text">Survive infinite waves of wrong-way wanderers. How long can you last?<br><br><em>Coming soon!</em></p>
+    </div>
+  </div>
+  <div id="mini-games" class="screen">
+    <button class="menu-btn back-btn" onclick="showScreen('main-menu')">⬅️ BACK</button>
+    <div class="coming-soon-box" style="margin:auto;">
+      <div class="coming-soon-icon">🎮</div>
+      <div class="coming-soon-title">MINI GAMES</div>
+      <p class="coming-soon-text">Quick challenges with unique rules. Unlocks after 20 levels.<br><br><em>Coming soon!</em></p>
+    </div>
+  </div>
+  <div id="chaos-menu" class="screen">
+    <button class="menu-btn back-btn" onclick="showScreen('main-menu')">⬅️ BACK</button>
+    <div class="coming-soon-box" style="margin:auto;">
+      <div class="coming-soon-icon">🌪️</div>
+      <div class="coming-soon-title">CHAOS MODE</div>
+      <p class="coming-soon-text">All enemies, all worlds, all at once. Unlocks after beating all 200 levels.<br><br><em>Coming soon!</em></p>
+    </div>
+  </div>
+
+<script>
+// =================================================================
+// SECTION 1: WORLDS
+// Add new worlds here. Each entry maps to a visual theme + level range.
+// =================================================================
+const WORLDS = {
+  office: {
+    id: 'office',
+    name: 'The Office',
+    icon: '🏢',
+    startLevel: 1,
+    endLevel: 50,
+    bodyClass: '',
+    laneGoal: '🚪',
+    laneSpawn: '➡️',
+    description: 'A maze of cubicles, printer jams, and passive-aggressive sticky notes. Everyone is lost — including the employees.',
+    unlockMsg: 'Floor cleared! Someone left the building... through the wrong exit.',
+    enemies: ['lostGuy','lateGuy','thinker','bigGuy','pusher','copycat','follower','shielded','rebel','cleaner'],
+    defenses: ['bouncer','chair','signPost','waitingLine','horn','wrongArrow','wetFloor','fallingSign','oneWayDoor','suspiciousBox','detourCone','mirror','closedGate','camera','trapDoor','escalator','brokenElevator','fakeExit','panicSiren','repairTool','directionJammer','crowdBarrier','confusionBeacon','masterSign']
+  },
+  mall: {
+    id: 'mall',
+    name: 'The Shopping Mall',
+    icon: '🛍️',
+    startLevel: 51,
+    endLevel: 100,
+    bodyClass: 'world-mall',
+    laneGoal: '🚪',
+    laneSpawn: '🛒',
+    description: 'An endless labyrinth of stores, escalators, and food courts. Nobody can find the exit because nobody wants to leave.',
+    unlockMsg: 'Mall evacuated! All sales have been cancelled. Nobody is happy.',
+    enemies: ['shopper','influencer','mallSecurity','foodCourtGuy','teenager','mallWalker','groupShopper','shoplifter'],
+    defenses: ['bouncer','chair','signPost','waitingLine','horn','wrongArrow','detourCone','mirror','closedGate','camera','trapDoor','escalator','brokenElevator','fakeExit','panicSiren','repairTool','directionJammer','crowdBarrier','coffeeKiosk','salesRack','musicStore','fittingRoom','mallCart','confusionBeacon']
+  },
+  airport: {
+    id: 'airport',
+    name: 'The Airport',
+    icon: '✈️',
+    startLevel: 101,
+    endLevel: 150,
+    bodyClass: 'world-airport',
+    laneGoal: '🛬',
+    laneSpawn: '🛫',
+    description: 'A sprawling international terminal where everyone is late, everyone is in the wrong gate, and the WiFi costs $15/hr.',
+    unlockMsg: 'Terminal secured! All flights have been redirected… to the correct side.',
+    enemies: ['tourist','businessTraveler','delayed','overbaggage','airportSprinter','layoverGhost','frequentFlyer','lostLuggage'],
+    defenses: ['bouncer','chair','signPost','waitingLine','horn','wrongArrow','wetFloor','fallingSign','oneWayDoor','trapDoor','escalator','brokenElevator','panicSiren','directionJammer','crowdBarrier','confusionBeacon','masterSign','securityCheckpoint','conveyorBelt','gateAnnouncement','gateChange','immigrationDesk']
+  },
+  hotel: {
+    id: 'hotel',
+    name: 'The Haunted Hotel',
+    icon: '🏚️',
+    startLevel: 151,
+    endLevel: 200,
+    bodyClass: 'world-hotel',
+    laneGoal: '⚰️',
+    laneSpawn: '👁️',
+    description: 'Room 13 is always occupied. The elevator only goes down. The guests have been here since 1887 — and they\'re going the wrong way.',
+    unlockMsg: '👻 Spirits redirected! The hotel is now... slightly less haunted.',
+    enemies: ['ghost','vampire','zombie','witch','skeleton','mummy','poltergeist','werewolf'],
+    defenses: ['bouncer','signPost','horn','fallingSign','trapDoor','panicSiren','directionJammer','crowdBarrier','confusionBeacon','masterSign','holyWater','mirrorBane','garlicBulb','exorcismKit','silverKey']
+  }
+};
+
+// =================================================================
+// SECTION 2: DEFENSES
+// Add, remove, or tweak defenses here. unlockLevel determines
+// when it becomes available. World-specific defenses are marked.
+// =================================================================
+const DEFENSES = {
+  // --- World 1: Office ---
+  bouncer: {
+    name: 'Bouncer', icon: '🥊', cost: 30, category: 'Damage', damage: 20,
+    effect: 'knockback', unlockLevel: 1, world: 'office',
+    desc: 'Damage + pushback',
+    funFact: 'Former nightclub bouncer. Still thinks everyone needs to "take it outside."'
+  },
+  chair: {
+    name: 'Chair', icon: '🪑', cost: 12, category: 'Stop', effect: 'wait', duration: 2,
+    unlockLevel: 2, world: 'office',
+    desc: 'Enemy sits and waits',
+    funFact: 'Studies show 87% of lost people will sit if they see a chair. Even if they\'re in a hurry.'
+  },
+  signPost: {
+    name: 'Sign Post', icon: '🪧', cost: 15, category: 'Direction', effect: 'flip',
+    unlockLevel: 3, world: 'office',
+    desc: 'Flips direction randomly',
+    funFact: 'The average person trusts a sign more than their own instincts. Every. Single. Time.'
+  },
+  waitingLine: {
+    name: 'Waiting Line', icon: '🚶‍♂️🚶', cost: 18, category: 'Stop', effect: 'queue', duration: 3,
+    unlockLevel: 4, world: 'office',
+    desc: 'Enemies queue up',
+    funFact: 'People will stand in any line without asking what it\'s for. Proven in 40 countries.'
+  },
+  horn: {
+    name: 'Horn', icon: '📢', cost: 18, category: 'Chaos', effect: 'panic',
+    unlockLevel: 5, world: 'office',
+    desc: 'Causes panic',
+    funFact: 'Loudness directly correlates with panic. Science! (Probably.)'
+  },
+  wrongArrow: {
+    name: 'Wrong Arrow', icon: '⬅️', cost: 10, category: 'Direction', effect: 'flipOnce', uses: 1,
+    unlockLevel: 6, world: 'office',
+    desc: 'Flips once then breaks',
+    funFact: 'Budget cuts meant these arrows were made of cardboard. At least they work once!'
+  },
+  wetFloor: {
+    name: 'Wet Floor', icon: '⚠️', cost: 14, category: 'Chaos', effect: 'slip',
+    unlockLevel: 7, world: 'office',
+    desc: 'Enemies slip and slide',
+    funFact: 'Warning signs are optional when chaos is the goal.'
+  },
+  fallingSign: {
+    name: 'Falling Sign', icon: '🪧💥', cost: 40, category: 'Damage', damage: 50, effect: 'oneTime', uses: 1,
+    unlockLevel: 8, world: 'office',
+    desc: 'Heavy one-time damage',
+    funFact: 'Gravity: Nature\'s most reliable weapon since 9.8 m/s².'
+  },
+  oneWayDoor: {
+    name: 'One-Way', icon: '🚪→', cost: 20, category: 'Direction', effect: 'block',
+    unlockLevel: 9, world: 'office',
+    desc: 'Blocks backward movement',
+    funFact: 'No backsies! This door has commitment issues — but only in one direction.'
+  },
+  suspiciousBox: {
+    name: 'Box', icon: '📦❓', cost: 16, category: 'Chaos', effect: 'random',
+    unlockLevel: 10, world: 'office',
+    desc: 'Random behavior',
+    funFact: 'Nobody knows what\'s inside. Not even the box.'
+  },
+  detourCone: {
+    name: 'Detour', icon: '🚧', cost: 22, category: 'Direction', effect: 'laneChange',
+    unlockLevel: 12, world: 'office',
+    desc: 'Forces lane change',
+    funFact: 'Construction workers placed these for "road work." The road was fine. They were bored.'
+  },
+  mirror: {
+    name: 'Mirror', icon: '🪞', cost: 25, category: 'Chaos', effect: 'copy',
+    unlockLevel: 14, world: 'office',
+    desc: 'Enemy copies another',
+    funFact: 'Monkey see, monkey do. Turns out humans are exactly the same.'
+  },
+  closedGate: {
+    name: 'Gate', icon: '🚧', cost: 25, category: 'Stop', effect: 'block', duration: 3,
+    unlockLevel: 16, world: 'office',
+    desc: 'Blocks temporarily',
+    funFact: 'Opens eventually. Patience not included.'
+  },
+  camera: {
+    name: 'Camera', icon: '📹', cost: 35, category: 'Damage', damage: 10, effect: 'confusedDamage',
+    unlockLevel: 18, world: 'office',
+    desc: 'Damages confused enemies',
+    funFact: 'Records everything. Especially embarrassing moments of confusion.'
+  },
+  trapDoor: {
+    name: 'Trap Door', icon: '🕳️', cost: 45, category: 'Damage', damage: 100, effect: 'drop', uses: 1,
+    unlockLevel: 20, world: 'office',
+    desc: 'Drops enemy instantly',
+    funFact: 'Where do they go? HR doesn\'t know. Nobody knows. Better that way.'
+  },
+  escalator: {
+    name: 'Escalator', icon: '🎢', cost: 28, category: 'Direction', effect: 'conveyor',
+    unlockLevel: 25, world: 'office',
+    desc: 'Pushes enemies slowly back',
+    funFact: 'Going the wrong way on an escalator: 10/10 confusion guaranteed.'
+  },
+  brokenElevator: {
+    name: 'Elevator', icon: '🛗', cost: 30, category: 'Stop', effect: 'stuck', duration: 4,
+    unlockLevel: 30, world: 'office',
+    desc: 'Enemy gets stuck',
+    funFact: 'Been "under maintenance" since 2003. Nobody has fixed it. Nobody will.'
+  },
+  fakeExit: {
+    name: 'Fake Exit', icon: '🚪✨', cost: 35, category: 'Chaos', effect: 'celebrate',
+    unlockLevel: 35, world: 'office',
+    desc: 'Enemy celebrates, wastes time',
+    funFact: 'The door leads to a broom closet. They never check before celebrating.'
+  },
+  panicSiren: {
+    name: 'Siren', icon: '🚨', cost: 40, category: 'Chaos', effect: 'areaPanic',
+    unlockLevel: 40, world: 'office',
+    desc: 'Panics nearby enemies',
+    funFact: '9 out of 10 people panic when a siren goes off. The 10th was already panicking.'
+  },
+  repairTool: {
+    name: 'Repair', icon: '🔧', cost: 20, category: 'Special', effect: 'repair',
+    unlockLevel: 45, world: 'office',
+    desc: 'Repairs broken tiles',
+    funFact: 'Finally, something useful! Just kidding, it breaks after 3 uses.'
+  },
+  directionJammer: {
+    name: 'Jammer', icon: '📡', cost: 50, category: 'Chaos', effect: 'jamDirection',
+    unlockLevel: 55, world: 'office',
+    desc: 'Randomizes all directions',
+    funFact: 'GPS nightmare mode. Even Google Maps gives up.'
+  },
+  crowdBarrier: {
+    name: 'Barrier', icon: '🚧🚧', cost: 45, category: 'Stop', effect: 'massBlock', duration: 5,
+    unlockLevel: 60, world: 'office',
+    desc: 'Blocks multiple enemies',
+    funFact: 'One barrier to rule them all. Concert security approved.'
+  },
+  confusionBeacon: {
+    name: 'Beacon', icon: '💡', cost: 55, category: 'Chaos', effect: 'areaConfuse',
+    unlockLevel: 65, world: 'office',
+    desc: 'Confuses all in range',
+    funFact: 'Emits a frequency that makes people forget why they came here.'
+  },
+  masterSign: {
+    name: 'Master Sign', icon: '🪧👑', cost: 100, category: 'Direction', effect: 'masterFlip',
+    unlockLevel: 100, world: 'office',
+    desc: 'Ultimate direction control',
+    funFact: 'Forged in the fires of bureaucracy. The sign to end all signs.'
+  },
+
+  // --- World 2: Mall ---
+  coffeeKiosk: {
+    name: 'Coffee Kiosk', icon: '☕', cost: 20, category: 'Stop', effect: 'wait', duration: 3,
+    unlockLevel: 55, world: 'mall',
+    desc: 'Lures enemies into getting coffee',
+    funFact: 'No human has ever walked past a coffee kiosk without at least considering stopping.'
+  },
+  salesRack: {
+    name: 'Sale Rack', icon: '👗', cost: 18, category: 'Chaos', effect: 'flip',
+    unlockLevel: 58, world: 'mall',
+    desc: 'Distracted by a 70% off sign',
+    funFact: 'The words "FINAL SALE" have stopped more people than any wall ever built.'
+  },
+  musicStore: {
+    name: 'Music Store', icon: '🎵', cost: 25, category: 'Chaos', effect: 'panic',
+    unlockLevel: 65, world: 'mall',
+    desc: 'Overwhelming music causes confusion',
+    funFact: 'Playing death metal at full volume in a mall: technically legal, definitely effective.'
+  },
+  fittingRoom: {
+    name: 'Fitting Room', icon: '🪞👚', cost: 32, category: 'Stop', effect: 'stuck', duration: 5,
+    unlockLevel: 72, world: 'mall',
+    desc: 'Enemy gets stuck trying things on',
+    funFact: 'Nobody ever goes in for just one item. Nobody.'
+  },
+  mallCart: {
+    name: 'Runaway Cart', icon: '🛒💨', cost: 22, category: 'Damage', damage: 30, effect: 'knockback',
+    unlockLevel: 78, world: 'mall',
+    desc: 'Rogue shopping cart hits enemies',
+    funFact: 'That wobbling wheel wasn\'t a bug. It was a weapon all along.'
+  },
+
+  // --- World 3: Airport ---
+  securityCheckpoint: {
+    name: 'Checkpoint', icon: '🛂', cost: 35, category: 'Stop', effect: 'wait', duration: 6,
+    unlockLevel: 105, world: 'airport',
+    desc: 'Major security delay',
+    funFact: 'Please remove your shoes, belt, watch, dignity, and sense of time.'
+  },
+  conveyorBelt: {
+    name: 'Conveyor', icon: '↩️🏃', cost: 28, category: 'Direction', effect: 'conveyor',
+    unlockLevel: 108, world: 'airport',
+    desc: 'Pushes enemies backward on belt',
+    funFact: 'The moving walkway was supposed to help. Nobody walks the right way on it.'
+  },
+  gateAnnouncement: {
+    name: 'Gate Change', icon: '📣', cost: 22, category: 'Chaos', effect: 'areaPanic',
+    unlockLevel: 115, world: 'airport',
+    desc: 'Sudden gate change panics everyone',
+    funFact: '"Your gate has changed to Z47." Those four words destroy more people than turbulence.'
+  },
+  gateChange: {
+    name: 'Wrong Gate', icon: '🚪❌', cost: 25, category: 'Direction', effect: 'flip',
+    unlockLevel: 122, world: 'airport',
+    desc: 'Redirects enemy to wrong terminal',
+    funFact: 'Terminal A is not near Terminal B. Terminal B is near Terminal C. C is next to A. Nobody understands this.'
+  },
+  immigrationDesk: {
+    name: 'Immigration', icon: '🛃', cost: 45, category: 'Stop', effect: 'stuck', duration: 8,
+    unlockLevel: 135, world: 'airport',
+    desc: 'Heavy questioning stalls enemy',
+    funFact: '"Purpose of visit?" "I\'m trying to get to the exit." "Please step to the side."'
+  },
+
+  // --- World 4: Haunted Hotel ---
+  holyWater: {
+    name: 'Holy Water', icon: '💧✨', cost: 35, category: 'Damage', damage: 50, effect: 'knockback',
+    unlockLevel: 155, world: 'hotel',
+    desc: 'Blessed knockback — extra potent on undead',
+    funFact: 'Sourced from a very confused priest who wasn\'t sure where the hotel chapel was.'
+  },
+  mirrorBane: {
+    name: 'Dark Mirror', icon: '🪞🌑', cost: 30, category: 'Chaos', effect: 'flip',
+    unlockLevel: 162, world: 'hotel',
+    desc: 'Confuses and flips spectral enemies',
+    funFact: 'Vampires avoid it. Witches reverse it. Werewolves just break it.'
+  },
+  garlicBulb: {
+    name: 'Garlic', icon: '🧄', cost: 20, category: 'Chaos', effect: 'panic',
+    unlockLevel: 168, world: 'hotel',
+    desc: 'Repels and slows undead enemies',
+    funFact: 'The hotel kitchen thought this was a cooking ingredient. It was not.'
+  },
+  exorcismKit: {
+    name: 'Exorcism', icon: '📖✝️', cost: 60, category: 'Damage', damage: 200, effect: 'oneTime', uses: 1,
+    unlockLevel: 175, world: 'hotel',
+    desc: 'Devastating one-time spirit damage',
+    funFact: 'The priest got lost trying to find room 666. He found it. He won\'t talk about it.'
+  },
+  silverKey: {
+    name: 'Silver Key', icon: '🗝️', cost: 50, category: 'Damage', damage: 90, effect: 'oneTime', uses: 3,
+    unlockLevel: 182, world: 'hotel',
+    desc: '3 uses of heavy silver damage',
+    funFact: 'Used for the master lock on the spirit realm. Also opens the minibar. Weird.'
+  }
+};
+
+// =================================================================
+// SECTION 3: ENEMIES
+// Add enemies here. world field links them to their world's pool.
+// Behavior notes: 'random'=changes dir, 'burst'=fast sprint then slow,
+// 'stops'=pauses often, 'breaks'=destroys weak defenses, 'immune'=ignores 1st hit,
+// 'opposite'=reverses signs, 'removes'=destroys placed defenses,
+// 'phasing'=50% chance to ignore a defense, 'revives'=respawns at 50% HP once.
+// =================================================================
+const ENEMIES = {
+  // ===== WORLD 1: THE OFFICE =====
+  lostGuy: {
+    name: 'Lost Guy', icon: '🚶', health: 50, speed: 1, points: 10,
+    behavior: 'random', mood: '😐', world: 'office',
+    weakness: 'Any direction change',
+    funFact: 'Has been lost since Tuesday. Still insists he "knows where he\'s going."'
+  },
+  lateGuy: {
+    name: 'Late Guy', icon: '🏃', health: 40, speed: 1.5, points: 15,
+    behavior: 'burst', mood: '😰', world: 'office',
+    weakness: 'Waiting lines and chairs',
+    funFact: 'Late to his own birth. Always in a hurry but never on time.'
+  },
+  thinker: {
+    name: 'Thinker', icon: '🤔', health: 60, speed: 0.8, points: 12,
+    behavior: 'stops', mood: '🤔', world: 'office',
+    weakness: 'More signs = more thinking',
+    funFact: 'Overthinks everything. Once spent 20 minutes deciding which door to use.'
+  },
+  bigGuy: {
+    name: 'Big Guy', icon: '🧔', health: 150, speed: 0.5, points: 30,
+    behavior: 'breaks', mood: '😤', world: 'office',
+    weakness: 'Trap doors',
+    funFact: 'Doesn\'t fit through most doors. Goes through them anyway.'
+  },
+  pusher: {
+    name: 'Pusher', icon: '💪', health: 80, speed: 0.9, points: 20,
+    behavior: 'pushes', mood: '😠', world: 'office',
+    weakness: 'Wet floors',
+    funFact: 'Gym membership expired but the attitude didn\'t.'
+  },
+  copycat: {
+    name: 'Copycat', icon: '👯', health: 55, speed: 1.0, points: 20,
+    behavior: 'copy', mood: '😏', world: 'office',
+    weakness: 'Chaos when alone',
+    funFact: 'No original thoughts. Ever. Probably copying this bio from someone else.'
+  },
+  follower: {
+    name: 'Follower', icon: '🐑', health: 45, speed: 1.1, points: 15,
+    behavior: 'follows', mood: '😊', world: 'office',
+    weakness: 'Panics when leader is confused',
+    funFact: 'Would follow you off a cliff if you went first. Peer pressure is real.'
+  },
+  shielded: {
+    name: 'Shielded', icon: '🛡️', health: 70, speed: 0.9, points: 25,
+    behavior: 'immune', mood: '😎', world: 'office',
+    weakness: 'Multiple hits',
+    funFact: 'Found the shield in the supply closet. It\'s actually a trash can lid.'
+  },
+  rebel: {
+    name: 'Rebel', icon: '😈', health: 65, speed: 1.2, points: 22,
+    behavior: 'opposite', mood: '😈', world: 'office',
+    weakness: 'Reverse psychology',
+    funFact: 'Does the opposite of everything. Tell them to leave and they\'ll stay forever.'
+  },
+  cleaner: {
+    name: 'Cleaner', icon: '🧹', health: 50, speed: 0.7, points: 30,
+    behavior: 'removes', mood: '🤨', world: 'office',
+    weakness: 'Traps and damage defenses',
+    funFact: 'Takes the job too seriously. Your defenses are "clutter." Rude.'
+  },
+
+  // ===== WORLD 2: THE MALL =====
+  shopper: {
+    name: 'Shopper', icon: '🛍️', health: 60, speed: 0.9, points: 15,
+    behavior: 'stops', mood: '😍', world: 'mall',
+    weakness: 'Sale signs and coffee kiosks',
+    funFact: 'Came in for one thing. Has not bought that thing. Has been here four hours.'
+  },
+  influencer: {
+    name: 'Influencer', icon: '📸', health: 50, speed: 1.3, points: 22,
+    behavior: 'broadcasts', mood: '🤳', world: 'mall',
+    weakness: 'Camera traps and confusion',
+    funFact: 'Is live-streaming right now. Yes, you\'re in the background. No, you\'re not getting royalties.'
+  },
+  mallSecurity: {
+    name: 'Mall Cop', icon: '🚓', health: 110, speed: 0.8, points: 28,
+    behavior: 'immune', mood: '😐', world: 'mall',
+    weakness: 'Chaos and large crowds',
+    funFact: 'Riding a Segway indoors at max speed. Has never actually caught anyone. Very committed.'
+  },
+  foodCourtGuy: {
+    name: 'Food Guy', icon: '🍔', health: 75, speed: 0.6, points: 18,
+    behavior: 'stops', mood: '😋', world: 'mall',
+    weakness: 'Direction changes while eating',
+    funFact: 'The food court was not his destination. He just smells something good every 20 feet.'
+  },
+  teenager: {
+    name: 'Teenager', icon: '🙄', health: 55, speed: 1.4, points: 22,
+    behavior: 'opposite', mood: '🙄', world: 'mall',
+    weakness: 'Other teenagers (peer pressure)',
+    funFact: 'Will do the opposite of whatever sign says. Also the opposite of what parents say. Always.'
+  },
+  mallWalker: {
+    name: 'Mall Walker', icon: '👴', health: 220, speed: 0.3, points: 40,
+    behavior: 'steady', mood: '😌', world: 'mall',
+    weakness: 'Seating areas — impossible to move once seated',
+    funFact: 'Here for exercise. Has been doing this since 1994. Knows every tile by heart.'
+  },
+  groupShopper: {
+    name: 'Squad', icon: '👯‍♀️', health: 50, speed: 1.0, points: 25,
+    behavior: 'copy', mood: '😄', world: 'mall',
+    weakness: 'Splitting and chaotic defenses',
+    funFact: 'They move as one. They think as one. They share one brain cell between five people.'
+  },
+  shoplifter: {
+    name: 'Shoplifter', icon: '🏃‍♂️💨', health: 35, speed: 2.2, points: 32,
+    behavior: 'burst', mood: '😬', world: 'mall',
+    weakness: 'Any blocking defense — terrible at planning',
+    funFact: 'Fastest person in the mall. Has never been caught. Has also never found the exit.'
+  },
+
+  // ===== WORLD 3: THE AIRPORT =====
+  tourist: {
+    name: 'Tourist', icon: '📷', health: 55, speed: 0.7, points: 15,
+    behavior: 'stops', mood: '😲', world: 'airport',
+    weakness: 'Any sign — stops to photograph them all',
+    funFact: 'Has taken 3,000 photos and hasn\'t looked at any of them since leaving.'
+  },
+  businessTraveler: {
+    name: 'Biz Traveler', icon: '💼', health: 65, speed: 1.5, points: 28,
+    behavior: 'burst', mood: '😤', world: 'airport',
+    weakness: 'Security lines — even the VIP ones',
+    funFact: 'Has Global Entry. Still complaining about the line. The line is 2 people.'
+  },
+  delayed: {
+    name: 'Delayed Flyer', icon: '😡', health: 90, speed: 0.9, points: 22,
+    behavior: 'breaks', mood: '😠', world: 'airport',
+    weakness: 'Gate announcements — makes it worse',
+    funFact: 'Flight was delayed 45 minutes. Has been furious for 6 hours. Energy levels: infinite.'
+  },
+  overbaggage: {
+    name: 'Overloaded', icon: '🧳🧳', health: 140, speed: 0.35, points: 30,
+    behavior: 'steady', mood: '😓', world: 'airport',
+    weakness: 'Conveyor belts — can\'t carry bags on them',
+    funFact: 'Paid $180 in overweight fees. Didn\'t remove anything. Will do it again.'
+  },
+  airportSprinter: {
+    name: 'Gate Runner', icon: '🏃✈️', health: 40, speed: 2.5, points: 35,
+    behavior: 'burst', mood: '😱', world: 'airport',
+    weakness: 'Anything blocking — no time to swerve',
+    funFact: 'Boarding closes in 3 minutes. Gate is 2km away. Has full luggage. Will make it.'
+  },
+  layoverGhost: {
+    name: 'Layover Guy', icon: '🥱', health: 70, speed: 0.8, points: 18,
+    behavior: 'random', mood: '😶', world: 'airport',
+    weakness: 'Any distraction — already bored out of his mind',
+    funFact: '11-hour layover. Zero plan. Has already eaten at every food stall twice.'
+  },
+  frequentFlyer: {
+    name: 'Elite Flyer', icon: '🛫', health: 90, speed: 1.5, points: 38,
+    behavior: 'immune', mood: '😎', world: 'airport',
+    weakness: 'Multiple consecutive defenses — even elites get overwhelmed',
+    funFact: 'Gold status. Lounge access. Still going the wrong way. Some things can\'t be upgraded.'
+  },
+  lostLuggage: {
+    name: 'Lost Luggage', icon: '🧳❓', health: 85, speed: 0.7, points: 26,
+    behavior: 'removes', mood: '❓', world: 'airport',
+    weakness: 'Damage defenses — can\'t dodge what it can\'t see',
+    funFact: 'Nobody knows whose it is. Nobody knows where it came from. It just keeps going.'
+  },
+
+  // ===== WORLD 4: THE HAUNTED HOTEL =====
+  ghost: {
+    name: 'Ghost', icon: '👻', health: 65, speed: 1.2, points: 28,
+    behavior: 'phasing', mood: '👻', world: 'hotel',
+    weakness: 'Holy water and sacred signs',
+    funFact: 'Still looking for its room. Has been looking since 1902. Key cards didn\'t exist then. Still doesn\'t get it.'
+  },
+  vampire: {
+    name: 'Vampire', icon: '🧛', health: 95, speed: 1.0, points: 38,
+    behavior: 'revives', mood: '😏', world: 'hotel',
+    weakness: 'Garlic and holy water — comes back once at 50% HP',
+    funFact: 'Checked in 400 years ago. The welcome wine was not wine. Nobody asks anymore.'
+  },
+  zombie: {
+    name: 'Zombie', icon: '🧟', health: 140, speed: 0.4, points: 32,
+    behavior: 'steady', mood: '🧟', world: 'hotel',
+    weakness: 'Damage defenses — immune to panic',
+    funFact: 'Moving toward the exit. Has been moving toward the exit for 20 years. Getting there.'
+  },
+  witch: {
+    name: 'Witch', icon: '🧙‍♀️', health: 78, speed: 1.1, points: 42,
+    behavior: 'opposite', mood: '🧙', world: 'hotel',
+    weakness: 'Dark mirrors — reverses the reversal',
+    funFact: 'Reverses the effect of every sign she passes. HR has filed several complaints.'
+  },
+  skeleton: {
+    name: 'Skeleton', icon: '💀', health: 25, speed: 1.4, points: 14,
+    behavior: 'burst', mood: '💀', world: 'hotel',
+    weakness: 'Almost anything — compensates with numbers',
+    funFact: 'Technically harmless. Comes in groups of twelve. Still technically harmless. Somehow still a problem.'
+  },
+  mummy: {
+    name: 'Mummy', icon: '🤐', health: 280, speed: 0.2, points: 55,
+    behavior: 'steady', mood: '😑', world: 'hotel',
+    weakness: 'Trap doors — won\'t fit back out',
+    funFact: 'Has been walking to the exit for 3,000 years. Increasing pace is not an option. The wrapping is too tight.'
+  },
+  poltergeist: {
+    name: 'Poltergeist', icon: '🌀', health: 58, speed: 1.35, points: 38,
+    behavior: 'removes', mood: '😈', world: 'hotel',
+    weakness: 'Holy water before it reaches your defenses',
+    funFact: 'Throws your defenses around the room because it\'s bored. Not malicious. Just bored. Somehow worse.'
+  },
+  werewolf: {
+    name: 'Werewolf', icon: '🐺', health: 110, speed: 1.8, points: 48,
+    behavior: 'burst', mood: '🐺', world: 'hotel',
+    weakness: 'Silver key traps — really doesn\'t like silver',
+    funFact: 'Only goes fast during bursts. Claims to be "a morning person." It\'s 3 AM. The moon is full. Both statements are somehow true.'
+  }
+};
+
+// =================================================================
+// SECTION 4: BOSSES
+// Each boss appears at a level divisible by 10.
+// Assign bosses to levels in generateLevels() below.
+// =================================================================
+const BOSSES = {
+  // ===== WORLD 1 BOSSES: THE OFFICE =====
+  supervisor: {
+    name: 'The Supervisor', icon: '👔', health: 300, speed: 0.6, points: 100,
+    behavior: 'removePanic', mood: '😑', world: 'office',
+    weakness: 'Overwhelming chaos',
+    bossPhase: 'Calms all panicked nearby enemies every 10 seconds',
+    funFact: 'Manages a team of 2 but talks like a Fortune 500 CEO. "Synergy" has been said 14 times today.'
+  },
+  hrManager: {
+    name: 'HR Manager', icon: '📋', health: 350, speed: 0.55, points: 120,
+    behavior: 'healsAllies', mood: '🙂', world: 'office',
+    weakness: 'Direction defenses — can\'t file a form while turned around',
+    bossPhase: 'Heals all nearby enemies by 20 HP every 8 seconds. Cannot be panicked.',
+    funFact: 'Has read every policy manual. None of them say you have to go the right way. Has checked. Three times.'
+  },
+  coach: {
+    name: 'The Coach', icon: '🏋️', health: 380, speed: 0.5, points: 150,
+    behavior: 'speedsAll', mood: '💪', world: 'office',
+    weakness: 'Stop defenses — cannot motivate a trapped enemy',
+    bossPhase: 'Speeds up all enemies when it drops below 50% health',
+    funFact: 'Motivational speeches increase enemy speed by 200%. Nobody asked for this. Nobody wanted this.'
+  },
+  accountant: {
+    name: 'The Accountant', icon: '🧮', health: 400, speed: 0.45, points: 160,
+    behavior: 'reducesRewards', mood: '🤓', world: 'office',
+    weakness: 'Chaos effects — can\'t recalculate mid-panic',
+    bossPhase: 'Reduces money earned from defeated enemies by 50% while alive',
+    funFact: 'Has deducted your earned coins as a "business expense." Legal team says this is fine. It is not fine.'
+  },
+  ceo: {
+    name: 'The CEO', icon: '🏆', health: 500, speed: 0.7, points: 250,
+    behavior: 'reversesLanes', mood: '😈', world: 'office',
+    weakness: 'Master Sign — even the CEO can\'t ignore the master sign',
+    bossPhase: 'Reverses all lane directions at 50% health. Summons 3 assistants on entry.',
+    funFact: 'Hired everyone here. Lost everyone here. Now lost himself. A fitting end to the quarterly review.'
+  },
+
+  // ===== WORLD 2 BOSSES: THE MALL =====
+  mallManager: {
+    name: 'Mall Manager', icon: '🏪', health: 420, speed: 0.65, points: 180,
+    behavior: 'speedsAll', mood: '😤', world: 'mall',
+    weakness: 'Stop defenses — has a schedule to keep',
+    bossPhase: 'Speeds up all mall enemies. Immune to panic while carrying clipboard.',
+    funFact: 'In charge of 200 stores. Hasn\'t visited 180 of them. Has a very clear lanyard though.'
+  },
+  securityChief: {
+    name: 'Security Chief', icon: '👮', health: 480, speed: 0.6, points: 200,
+    behavior: 'disablesTraps', mood: '😠', world: 'mall',
+    weakness: 'Chaos defenses — cannot radio for backup during full chaos',
+    bossPhase: 'Disables one random trap defense in range every 12 seconds',
+    funFact: 'Has 27 monitors. Watched exactly 1 of them. Missed everything on the other 26.'
+  },
+  influencerElite: {
+    name: 'Mega Influencer', icon: '📲', health: 440, speed: 0.9, points: 210,
+    behavior: 'speedsAll', mood: '🌟', world: 'mall',
+    weakness: 'Blocking defenses — can\'t film while stuck',
+    bossPhase: 'Passively boosts all nearby enemy speed by 40%. Goes viral when damaged.',
+    funFact: '50 million followers. Currently they\'re all watching her walk the wrong way through a mall. Content.'
+  },
+  storeOwner: {
+    name: 'Store Owner', icon: '🏬', health: 520, speed: 0.5, points: 225,
+    behavior: 'immune', mood: '🤑', world: 'mall',
+    weakness: 'Multiple damage sources — insurance only covers 3 incidents',
+    bossPhase: 'Immune to first 3 damage-dealing defenses. Absorbs money from nearby enemies.',
+    funFact: 'Opened a pop-up shop in the middle of the lane. Charging rent for tiles. Technically legal.'
+  },
+  mallDirector: {
+    name: 'The Mall Director', icon: '🎪', health: 650, speed: 0.8, points: 300,
+    behavior: 'reversesLanes', mood: '😈', world: 'mall',
+    weakness: 'Direction + damage combo',
+    bossPhase: 'Reverses lanes at 75% and 25% health. Summons shoppers when below 50%.',
+    funFact: 'Designed the mall layout himself. Intentionally made it confusing. Has worked here for 30 years and still gets lost.'
+  },
+
+  // ===== WORLD 3 BOSSES: THE AIRPORT =====
+  tsaChief: {
+    name: 'TSA Chief', icon: '🕵️', health: 500, speed: 0.55, points: 200,
+    behavior: 'disablesTraps', mood: '😐', world: 'airport',
+    weakness: 'Direction changes — protocol doesn\'t cover going backwards',
+    bossPhase: 'Disables all Stop-category defenses for 4 seconds every 15 seconds',
+    funFact: 'Confiscated 10,000 water bottles. Keeps them in a personal collection. "Evidence."'
+  },
+  airportManager: {
+    name: 'Airport Manager', icon: '🛬', health: 560, speed: 0.6, points: 220,
+    behavior: 'healsAllies', mood: '😑', world: 'airport',
+    weakness: 'Chaos — cannot manage chaos (has tried)',
+    bossPhase: 'Calls in reinforcements (2 random airport enemies) at 70% and 40% health',
+    funFact: 'Has overseen 12 terminal expansions. The airport is now somehow smaller inside. Nobody understands this.'
+  },
+  flightController: {
+    name: 'Flight Controller', icon: '📡', health: 600, speed: 0.65, points: 240,
+    behavior: 'reversesLanes', mood: '😤', world: 'airport',
+    weakness: 'Stop defenses — loses control when immobilized',
+    bossPhase: 'Reverses all lane directions at 60% health. Immune to confusion.',
+    funFact: 'Controls 300 flights a day. Is currently sending all of them in the wrong direction. Blames weather.'
+  },
+  customsOfficer: {
+    name: 'Customs Officer', icon: '🛃', health: 580, speed: 0.5, points: 230,
+    behavior: 'reducesRewards', mood: '🧐', world: 'airport',
+    weakness: 'Panic defenses — the chaos exceeds his jurisdiction',
+    bossPhase: 'Reduces player money income to 0 while alive. Immune to first Chaos effect.',
+    funFact: '"Anything to declare?" Yes. Several defenses. He\'s confiscated them under "prohibited items."'
+  },
+  airportDirector: {
+    name: 'Airport Director', icon: '✈️👑', health: 750, speed: 0.75, points: 350,
+    behavior: 'reversesLanes', mood: '😈', world: 'airport',
+    weakness: 'Master Sign — outranks even the Director',
+    bossPhase: 'Reverses lanes at 60% and 25% health. Speeds all enemies at 40%. Disables 1 defense at 80%.',
+    funFact: 'Built this airport. Named it after himself. Is currently in the wrong terminal of his own airport. Beautiful.'
+  },
+
+  // ===== WORLD 4 BOSSES: THE HAUNTED HOTEL =====
+  headGhost: {
+    name: 'Head Ghost', icon: '👻💜', health: 550, speed: 1.0, points: 260,
+    behavior: 'phasing', mood: '👻', world: 'hotel',
+    weakness: 'Holy water — actually affects him',
+    bossPhase: 'Phases through all Stop defenses. Spawns 2 ghosts when below 50% health.',
+    funFact: 'In charge of 200 hotel spirits. Nobody listens to him. Even in death, middle management is thankless.'
+  },
+  vampireLord: {
+    name: 'Vampire Lord', icon: '🧛‍♂️🦇', health: 650, speed: 0.9, points: 280,
+    behavior: 'revives', mood: '😈', world: 'hotel',
+    weakness: 'Garlic + holy water combo — both, not just one',
+    bossPhase: 'Revives 3 times with 40% HP. Heals from enemy defeats near him.',
+    funFact: 'Has lived for 800 years. Still uses the same pickup line. It has never worked. He will try again next century.'
+  },
+  witchQueen: {
+    name: 'Witch Queen', icon: '🧙‍♀️👑', health: 600, speed: 1.0, points: 290,
+    behavior: 'opposite', mood: '🧙', world: 'hotel',
+    weakness: 'Dark mirrors — even she can\'t reverse a reversed reversal',
+    bossPhase: 'Reverses the effect of ALL defenses while alive. Immune to confusion.',
+    funFact: 'Has a spell for everything. Unfortunately all spells only affect direction. She is very focused.'
+  },
+  mummyKing: {
+    name: 'Mummy King', icon: '🤐👑', health: 1200, speed: 0.2, points: 310,
+    behavior: 'steady', mood: '😑', world: 'hotel',
+    weakness: 'Patience and every damage defense you own',
+    bossPhase: 'Absorbs the first 100 damage from any single hit. Immune to stop defenses.',
+    funFact: 'Has been walking toward the exit for 5,000 years. Is 90% of the way there. This is the finale we didn\'t want.'
+  },
+  phantomGM: {
+    name: 'The Phantom GM', icon: '🎭👑', health: 1500, speed: 0.85, points: 500,
+    behavior: 'reversesLanes', mood: '💀', world: 'hotel',
+    weakness: 'Master Sign + exorcism + silver — requires everything at once',
+    bossPhase: 'Reverses lanes at 75%, 50%, and 25%. Phases through defenses. Revives once. Summons 2 bosses at 33%.',
+    funFact: 'The original hotel owner. Died in 1889. Refuses to leave because the checkout time said 11 AM and it\'s only 10:58. Hotel policy is hotel policy.'
+  }
+};
+
+// =================================================================
+// SECTION 5: LEVEL GENERATOR
+// Generates all 200 levels. Edit scaling formulas here.
+// Boss levels: every 10. World unlocks: every 50.
+// =================================================================
+function generateLevels() {
+  const levels = [];
+
+  // Boss assignment: level → boss key
+  const BOSS_ASSIGNMENTS = {
+    10: 'supervisor',
+    20: 'hrManager',
+    30: 'coach',
+    40: 'accountant',
+    50: 'ceo',
+    60: 'mallManager',
+    70: 'securityChief',
+    80: 'influencerElite',
+    90: 'storeOwner',
+    100: 'mallDirector',
+    110: 'tsaChief',
+    120: 'airportManager',
+    130: 'flightController',
+    140: 'customsOfficer',
+    150: 'airportDirector',
+    160: 'headGhost',
+    170: 'vampireLord',
+    180: 'witchQueen',
+    190: 'mummyKing',
+    200: 'phantomGM'
+  };
+
+  // Get world data for a given level id
+  function getWorldForLevel(id) {
+    for (const world of Object.values(WORLDS)) {
+      if (id >= world.startLevel && id <= world.endLevel) return world;
+    }
+    return Object.values(WORLDS)[0];
+  }
+
+  for (let i = 1; i <= 200; i++) {
+    const world = getWorldForLevel(i);
+    const isBoss = (i % 10 === 0);
+    const isWorldBoss = (i % 50 === 0);
+    const bossKey = BOSS_ASSIGNMENTS[i] || null;
+
+    // Scale waves: normal levels get 5–15 waves
+    let waves = isBoss ? 1 : Math.min(5 + Math.floor(i / 8), 15);
+
+    // Starting points scale with level
+    let startPoints = 100 + (i * 6);
+    if (isBoss) startPoints += 150;
+    if (isWorldBoss) startPoints += 200;
+
+    // Enemy pool — progressive unlock within each world
+    let enemyPool = [...world.enemies.slice(0, 2)]; // always 2 basic
+    const levelInWorld = i - world.startLevel + 1;
+    if (levelInWorld >= 5  && world.enemies[2]) enemyPool.push(world.enemies[2]);
+    if (levelInWorld >= 10 && world.enemies[3]) enemyPool.push(world.enemies[3]);
+    if (levelInWorld >= 15 && world.enemies[4]) enemyPool.push(world.enemies[4]);
+    if (levelInWorld >= 20 && world.enemies[5]) enemyPool.push(world.enemies[5]);
+    if (levelInWorld >= 30 && world.enemies[6]) enemyPool.push(world.enemies[6]);
+    if (levelInWorld >= 40 && world.enemies[7]) enemyPool.push(world.enemies[7]);
+
+    // Difficulty scaling within world
+    const scaledHealth  = 1 + (levelInWorld - 1) * 0.04; // +4% per level in world
+    const scaledSpeed   = 1 + (levelInWorld - 1) * 0.01; // +1% per level
+    const scaledPoints  = 1 + (levelInWorld - 1) * 0.05;
+
+    // Boss levels override
+    if (isBoss && bossKey) {
+      levels.push({
+        id: i,
+        world: world.id,
+        waves: 1,
+        startPoints,
+        enemies: [bossKey],
+        boss: true,
+        worldBoss: isWorldBoss,
+        name: `BOSS: ${BOSSES[bossKey]?.name || 'Unknown'}`,
+        scaledHealth, scaledSpeed, scaledPoints
+      });
+    } else {
+      levels.push({
+        id: i,
+        world: world.id,
+        waves,
+        startPoints,
+        enemies: enemyPool,
+        boss: false,
+        worldBoss: false,
+        name: `Level ${i}`,
+        scaledHealth, scaledSpeed, scaledPoints
+      });
+    }
+  }
+  return levels;
+}
+const LEVELS = generateLevels();
+
+// Helper: get world object for a world id string
+function getWorld(worldId) {
+  return WORLDS[worldId] || WORLDS.office;
+}
+
+// =================================================================
+// SECTION 6: GAME DATA & SAVE / LOAD
+// =================================================================
+let gameData = {
+  completedLevels: [],
+  levelStars: {},
+  unlockedDefenses: ['bouncer'],
+  unlockedWorlds: ['office'],
+  encounteredEnemies: [],
+  encounteredBosses: [],
+  selectedLoadout: [],
+  currentLevel: null,
+  almanacSource: null
+};
+
+function loadGameData() {
+  const saved = localStorage.getItem('oopsWrongSideDataV2');
+  if (saved) gameData = { ...gameData, ...JSON.parse(saved) };
+  updateUIState();
+}
+
+function saveGameData() {
+  localStorage.setItem('oopsWrongSideDataV2', JSON.stringify(gameData));
+}
+
+// =================================================================
+// SECTION 7: UI STATE & NAVIGATION
+// =================================================================
+function updateUIState() {
+  const miniGamesBtn = document.getElementById('mini-games-btn');
+  if (gameData.completedLevels.length < 20) miniGamesBtn.classList.add('disabled');
+  else miniGamesBtn.classList.remove('disabled');
+
+  const chaosBtn = document.getElementById('chaos-mode-btn');
+  if (!gameData.completedLevels.includes(200)) chaosBtn.classList.add('disabled');
+  else { chaosBtn.classList.remove('disabled'); chaosBtn.classList.add('special'); }
+  // NOTE: world theme is ONLY applied during active gameplay — never on menus.
+}
+
+// World theme: applied on gameplay entry, cleared on any exit back to menus.
+function applyWorldTheme(worldBodyClass) {
+  document.body.className = worldBodyClass || '';
+}
+
+// Gameplay screens that should keep the world theme active
+const GAMEPLAY_SCREENS = new Set(['gameplay-screen']);
+
+function showScreen(screenId, source = null) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(screenId);
+  if (!el) return;
+  el.classList.add('active');
+
+  // Always strip the world theme when leaving gameplay
+  if (!GAMEPLAY_SCREENS.has(screenId)) applyWorldTheme('');
+
+  if (screenId === 'level-select') renderLevelSelect();
+  else if (screenId === 'almanac') {
+    gameData.almanacSource = source;
+    switchAlmanacTab('defenses');
+  }
+}
+
+function closeAlmanac() {
+  if (gameData.almanacSource === 'from-game') { if (window.game) game.resume(); }
+  else showScreen('main-menu');
+}
+
+// =================================================================
+// SECTION 8: LEVEL SELECT — renders world sections + level grid
+// =================================================================
+function renderLevelSelect() {
+  const container = document.getElementById('world-sections');
+  container.innerHTML = '';
+
+  Object.values(WORLDS).forEach(world => {
+    const isWorldUnlocked = gameData.unlockedWorlds.includes(world.id);
+    const worldSection = document.createElement('div');
+    worldSection.className = 'world-section';
+
+    // World header
+    const header = document.createElement('div');
+    header.className = `world-header world-${world.id} ${isWorldUnlocked ? '' : 'locked'}`;
+    header.innerHTML = `
+      <div class="world-header-icon">${world.icon}</div>
+      <div class="world-header-text">
+        <div class="world-header-name">${world.name}</div>
+        ${isWorldUnlocked ? `<div class="world-unlock-msg">${world.description.substring(0,80)}…</div>` : ''}
+      </div>
+      <div class="world-lock-badge">${isWorldUnlocked ? '' : '🔒'}</div>
+    `;
+    worldSection.appendChild(header);
+
+    if (!isWorldUnlocked) {
+      const lockMsg = document.createElement('p');
+      lockMsg.style.cssText = 'text-align:center;padding:10px;opacity:0.5;font-style:italic;';
+      lockMsg.textContent = `Unlocks after completing Level ${world.startLevel - 1}`;
+      worldSection.appendChild(lockMsg);
+      container.appendChild(worldSection);
+      return;
+    }
+
+    // Level grid
+    const grid = document.createElement('div');
+    grid.className = 'level-grid';
+
+    for (let i = world.startLevel; i <= world.endLevel; i++) {
+      const level = LEVELS[i - 1];
+      const isCompleted = gameData.completedLevels.includes(i);
+      const isLocked = i > 1 && !gameData.completedLevels.includes(i - 1) && i !== world.startLevel;
+      // First level of each world is locked if world's previous level isn't done
+      const prevWorldComplete = world.startLevel === 1 || gameData.completedLevels.includes(world.startLevel - 1);
+      const isActuallyLocked = isLocked || (i === world.startLevel && !prevWorldComplete && world.startLevel > 1);
+      const stars = gameData.levelStars[i] || 0;
+      const isBossLevel = i % 10 === 0;
+      const isWorldBoss = i % 50 === 0;
+
+      const card = document.createElement('div');
+      card.className = `level-card ${isCompleted ? 'completed' : ''} ${isBossLevel ? 'boss' : ''} ${isActuallyLocked ? 'locked' : ''}`;
+      if (!isActuallyLocked) card.onclick = () => loadLevel(i);
+
+      let icon = '';
+      if (isActuallyLocked) icon = '🔒';
+      else if (isWorldBoss) icon = '💀';
+      else if (isBossLevel) icon = '👑';
+      else if (isCompleted) icon = '✅';
+
+      card.innerHTML = `
+        <div class="level-number">${i}</div>
+        <div class="level-icon">${icon}</div>
+        ${isCompleted && stars > 0 ? `<div class="level-stars">${'⭐'.repeat(stars)}</div>` : ''}
+      `;
+      grid.appendChild(card);
+    }
+    worldSection.appendChild(grid);
+    container.appendChild(worldSection);
+  });
+}
+
+// =================================================================
+// SECTION 9: LOADOUT SCREEN
+// =================================================================
+let currentLevelData = null;
+
+function loadLevel(levelId) {
+  currentLevelData = LEVELS[levelId - 1];
+  if (!currentLevelData) return;
+  const world = getWorld(currentLevelData.world);
+  document.getElementById('loadout-level-title').textContent = `${world.icon} Level ${levelId}`;
+  const worldName = world.name;
+  document.getElementById('level-info-text').textContent =
+    currentLevelData.boss
+      ? `⚠️ BOSS LEVEL · ${worldName} · Starting Points: ${currentLevelData.startPoints}`
+      : `Waves: ${currentLevelData.waves} · ${worldName} · Starting Points: ${currentLevelData.startPoints}`;
+  gameData.selectedLoadout = [];
+  renderLoadoutScreen(world);
+  showScreen('loadout-screen');
+}
+
+function renderLoadoutScreen(world) {
+  world = world || getWorld(currentLevelData?.world || 'office');
+  const maxSlots = Math.min(6 + Math.floor(gameData.completedLevels.length / 10), 8);
+  document.getElementById('loadout-max').textContent = maxSlots;
+  document.getElementById('loadout-count').textContent = gameData.selectedLoadout.length;
+
+  const defensesContainer = document.getElementById('available-defenses');
+  defensesContainer.innerHTML = '';
+  Object.entries(DEFENSES).forEach(([key, defense]) => {
+    const isUnlocked = gameData.unlockedDefenses.includes(key);
+    if (!isUnlocked) return; // hide locked defenses entirely
+    const isInLoadout = gameData.selectedLoadout.includes(key);
+    const item = document.createElement('div');
+    item.className = `defense-item ${isInLoadout ? 'in-loadout' : ''}`;
+    if (!isInLoadout) item.onclick = () => addToLoadout(key);
+    item.innerHTML = `
+      <div class="defense-icon">${defense.icon}</div>
+      <div class="defense-name">${defense.name}</div>
+      <div class="defense-cost">$${defense.cost}</div>
+    `;
+    defensesContainer.appendChild(item);
+  });
+
+  const slotsContainer = document.getElementById('loadout-slots');
+  slotsContainer.innerHTML = '';
+  for (let i = 0; i < maxSlots; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'loadout-slot';
+    if (i < gameData.selectedLoadout.length) {
+      const defense = DEFENSES[gameData.selectedLoadout[i]];
+      slot.classList.add('filled');
+      slot.innerHTML = `${defense.icon}<div class="slot-remove" onclick="removeFromLoadout(${i})">×</div>`;
+    } else {
+      slot.textContent = '+';
+    }
+    slotsContainer.appendChild(slot);
+  }
+}
+
+function addToLoadout(defenseKey) {
+  const maxSlots = Math.min(6 + Math.floor(gameData.completedLevels.length / 10), 8);
+  if (gameData.selectedLoadout.length >= maxSlots) return;
+  if (!gameData.selectedLoadout.includes(defenseKey)) {
+    gameData.selectedLoadout.push(defenseKey);
+    renderLoadoutScreen();
+  }
+}
+
+function removeFromLoadout(index) {
+  gameData.selectedLoadout.splice(index, 1);
+  renderLoadoutScreen();
+}
+
+function startGameFromLoadout() {
+  if (gameData.selectedLoadout.length === 0) { alert('Pick at least one defense!'); return; }
+  startGameplay();
+}
+
+// =================================================================
+// SECTION 10: ALMANAC
+// =================================================================
+let currentAlmanacTab = 'defenses';
+
+function switchAlmanacTab(tab) {
+  currentAlmanacTab = tab;
+  document.querySelectorAll('.almanac-tab').forEach(t => {
+    t.classList.remove('active');
+    if (t.textContent.trim().toLowerCase() === tab) t.classList.add('active');
+  });
+  const content = document.getElementById('almanac-content');
+  content.innerHTML = '';
+  if (tab === 'defenses')  renderDefensesAlmanac(content);
+  else if (tab === 'enemies')   renderEnemiesAlmanac(content);
+  else if (tab === 'bosses')    renderBossesAlmanac(content);
+  else if (tab === 'worlds')    renderWorldsAlmanac(content);
+  else if (tab === 'mechanics') renderMechanicsAlmanac(content);
+}
+
+function renderDefensesAlmanac(container) {
+  const grid = document.createElement('div');
+  grid.className = 'almanac-grid';
+  Object.entries(DEFENSES).forEach(([key, defense]) => {
+    const isUnlocked = gameData.unlockedDefenses.includes(key);
+    const item = document.createElement('div');
+    item.className = `almanac-item ${isUnlocked ? '' : 'locked'}`;
+    if (isUnlocked) item.onclick = () => showDefenseDetail(key);
+    item.innerHTML = `
+      <div class="almanac-item-icon">${isUnlocked ? defense.icon : '❓'}</div>
+      <div class="almanac-item-name">${isUnlocked ? defense.name : `Unlock Lv ${defense.unlockLevel}`}</div>
+    `;
+    grid.appendChild(item);
+  });
+  container.appendChild(grid);
+}
+
+function showDefenseDetail(defenseKey) {
+  const defense = DEFENSES[defenseKey];
+  const detail = document.createElement('div');
+  detail.className = 'almanac-detail active';
+  detail.innerHTML = `
+    <button class="menu-btn" onclick="switchAlmanacTab('defenses')" style="margin-bottom:20px;">⬅️ BACK</button>
+    <div class="detail-header">
+      <div class="detail-icon">${defense.icon}</div>
+      <div class="detail-title">${defense.name}</div>
+      <div class="detail-category">${defense.category}</div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Description</div><div class="detail-text">${defense.desc}</div></div>
+    <div class="detail-section">
+      <div class="detail-stats">
+        <div class="stat-box"><div class="stat-label">Cost</div><div class="stat-value-display">$${defense.cost}</div></div>
+        <div class="stat-box"><div class="stat-label">Unlock</div><div class="stat-value-display">Lv ${defense.unlockLevel}</div></div>
+        ${defense.damage ? `<div class="stat-box"><div class="stat-label">Damage</div><div class="stat-value-display">${defense.damage}</div></div>` : ''}
+        ${defense.duration ? `<div class="stat-box"><div class="stat-label">Duration</div><div class="stat-value-display">${defense.duration}s</div></div>` : ''}
+      </div>
+    </div>
+    <div class="detail-section" style="background:#fff8dc;border:2px dashed var(--accent-boss);">
+      <div class="detail-label" style="color:var(--accent-boss);">💡 Fun Fact</div>
+      <div class="detail-text" style="font-style:italic;">${defense.funFact}</div>
+    </div>
+  `;
+  document.getElementById('almanac-content').innerHTML = '';
+  document.getElementById('almanac-content').appendChild(detail);
+}
+
+function renderEnemiesAlmanac(container) {
+  // Group by world
+  Object.values(WORLDS).forEach(world => {
+    if (!gameData.unlockedWorlds.includes(world.id)) return;
+    const header = document.createElement('div');
+    header.style.cssText = 'font-family:"Bebas Neue",sans-serif;font-size:1.5rem;margin:15px 0 8px;color:var(--accent-warn);';
+    header.textContent = `${world.icon} ${world.name}`;
+    container.appendChild(header);
+    const grid = document.createElement('div');
+    grid.className = 'almanac-grid';
+    Object.entries(ENEMIES).filter(([, e]) => e.world === world.id).forEach(([key, enemy]) => {
+      const isEncountered = gameData.encounteredEnemies.includes(key);
+      const item = document.createElement('div');
+      item.className = `almanac-item ${isEncountered ? '' : 'locked'}`;
+      if (isEncountered) item.onclick = () => showEnemyDetail(key);
+      item.innerHTML = `
+        <div class="almanac-item-icon">${isEncountered ? enemy.icon : '❓'}</div>
+        <div class="almanac-item-name">${isEncountered ? enemy.name : 'Unknown'}</div>
+      `;
+      grid.appendChild(item);
+    });
+    container.appendChild(grid);
+  });
+}
+
+function showEnemyDetail(enemyKey) {
+  const enemy = ENEMIES[enemyKey];
+  const detail = document.createElement('div');
+  detail.className = 'almanac-detail active';
+  detail.innerHTML = `
+    <button class="menu-btn" onclick="switchAlmanacTab('enemies')" style="margin-bottom:20px;">⬅️ BACK</button>
+    <div class="detail-header">
+      <div class="detail-icon">${enemy.icon}</div>
+      <div class="detail-title">${enemy.name}</div>
+      <div class="detail-category">Enemy</div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Behavior</div><div class="detail-text">${getEnemyBehaviorDescription(enemy.behavior)}</div></div>
+    <div class="detail-section">
+      <div class="detail-stats">
+        <div class="stat-box"><div class="stat-label">Health</div><div class="stat-value-display">${enemy.health}</div></div>
+        <div class="stat-box"><div class="stat-label">Speed</div><div class="stat-value-display">${enemy.speed}×</div></div>
+        <div class="stat-box"><div class="stat-label">Points</div><div class="stat-value-display">${enemy.points}</div></div>
+        <div class="stat-box"><div class="stat-label">Mood</div><div class="stat-value-display">${enemy.mood}</div></div>
+      </div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Weakness</div><div class="detail-text">${enemy.weakness}</div></div>
+    <div class="detail-section" style="background:#fff8dc;border:2px dashed var(--accent-boss);">
+      <div class="detail-label" style="color:var(--accent-boss);">💡 Fun Fact</div>
+      <div class="detail-text" style="font-style:italic;">${enemy.funFact}</div>
+    </div>
+  `;
+  document.getElementById('almanac-content').innerHTML = '';
+  document.getElementById('almanac-content').appendChild(detail);
+}
+
+function renderBossesAlmanac(container) {
+  Object.values(WORLDS).forEach(world => {
+    if (!gameData.unlockedWorlds.includes(world.id)) return;
+    const header = document.createElement('div');
+    header.style.cssText = 'font-family:"Bebas Neue",sans-serif;font-size:1.5rem;margin:15px 0 8px;color:var(--accent-boss);';
+    header.textContent = `${world.icon} ${world.name} Bosses`;
+    container.appendChild(header);
+    const grid = document.createElement('div');
+    grid.className = 'almanac-grid';
+    Object.entries(BOSSES).filter(([, b]) => b.world === world.id).forEach(([key, boss]) => {
+      const isEncountered = gameData.encounteredBosses.includes(key);
+      const item = document.createElement('div');
+      item.className = `almanac-item ${isEncountered ? '' : 'locked'}`;
+      if (isEncountered) item.onclick = () => showBossDetail(key);
+      item.innerHTML = `
+        <div class="almanac-item-icon">${isEncountered ? boss.icon : '❓'}</div>
+        <div class="almanac-item-name">${isEncountered ? boss.name : 'Unknown'}</div>
+      `;
+      grid.appendChild(item);
+    });
+    container.appendChild(grid);
+  });
+}
+
+function showBossDetail(bossKey) {
+  const boss = BOSSES[bossKey];
+  const detail = document.createElement('div');
+  detail.className = 'almanac-detail active';
+  detail.innerHTML = `
+    <button class="menu-btn" onclick="switchAlmanacTab('bosses')" style="margin-bottom:20px;">⬅️ BACK</button>
+    <div class="detail-header">
+      <div class="detail-icon">${boss.icon}</div>
+      <div class="detail-title">${boss.name}</div>
+      <div class="detail-category" style="background:var(--accent-boss);">BOSS</div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Boss Special</div><div class="detail-text">${boss.bossPhase}</div></div>
+    <div class="detail-section">
+      <div class="detail-stats">
+        <div class="stat-box"><div class="stat-label">Health</div><div class="stat-value-display">${boss.health}</div></div>
+        <div class="stat-box"><div class="stat-label">Speed</div><div class="stat-value-display">${boss.speed}×</div></div>
+        <div class="stat-box"><div class="stat-label">Points</div><div class="stat-value-display">${boss.points}</div></div>
+        <div class="stat-box"><div class="stat-label">Mood</div><div class="stat-value-display">${boss.mood}</div></div>
+      </div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Weakness</div><div class="detail-text">${boss.weakness}</div></div>
+    <div class="detail-section" style="background:#fff8dc;border:2px dashed var(--accent-boss);">
+      <div class="detail-label" style="color:var(--accent-boss);">💡 Fun Fact</div>
+      <div class="detail-text" style="font-style:italic;">${boss.funFact}</div>
+    </div>
+  `;
+  document.getElementById('almanac-content').innerHTML = '';
+  document.getElementById('almanac-content').appendChild(detail);
+}
+
+function renderWorldsAlmanac(container) {
+  const grid = document.createElement('div');
+  grid.className = 'almanac-world-grid';
+  Object.values(WORLDS).forEach(world => {
+    const isUnlocked = gameData.unlockedWorlds.includes(world.id);
+    const card = document.createElement('div');
+    card.className = `almanac-world-card world-${world.id} ${isUnlocked ? '' : 'locked'}`;
+    if (isUnlocked) card.onclick = () => showWorldDetail(world.id);
+    card.innerHTML = `
+      <div class="almanac-world-card-icon">${isUnlocked ? world.icon : '🔒'}</div>
+      <div class="almanac-world-card-name">${isUnlocked ? world.name : 'Locked'}</div>
+      <div class="almanac-world-card-range">
+        ${isUnlocked ? `Levels ${world.startLevel}–${world.endLevel}` : `Unlocks at Lv ${world.startLevel}`}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
+}
+
+function showWorldDetail(worldId) {
+  const world = WORLDS[worldId];
+  const totalEnemies = Object.values(ENEMIES).filter(e => e.world === worldId).length;
+  const totalBosses = Object.values(BOSSES).filter(b => b.world === worldId).length;
+  const detail = document.createElement('div');
+  detail.className = 'almanac-detail active';
+  detail.innerHTML = `
+    <button class="menu-btn" onclick="switchAlmanacTab('worlds')" style="margin-bottom:20px;">⬅️ BACK</button>
+    <div class="detail-header">
+      <div class="detail-icon">${world.icon}</div>
+      <div class="detail-title">${world.name}</div>
+      <div class="detail-category">World ${Object.keys(WORLDS).indexOf(worldId) + 1}</div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Description</div><div class="detail-text">${world.description}</div></div>
+    <div class="detail-section">
+      <div class="detail-stats">
+        <div class="stat-box"><div class="stat-label">Levels</div><div class="stat-value-display">${world.startLevel}–${world.endLevel}</div></div>
+        <div class="stat-box"><div class="stat-label">Enemy Types</div><div class="stat-value-display">${totalEnemies}</div></div>
+        <div class="stat-box"><div class="stat-label">Bosses</div><div class="stat-value-display">${totalBosses}</div></div>
+        <div class="stat-box"><div class="stat-label">Boss Levels</div><div class="stat-value-display">Every 10</div></div>
+      </div>
+    </div>
+    <div class="detail-section"><div class="detail-label">Victory Message</div><div class="detail-text">${world.unlockMsg}</div></div>
+  `;
+  document.getElementById('almanac-content').innerHTML = '';
+  document.getElementById('almanac-content').appendChild(detail);
+}
+
+function renderMechanicsAlmanac(container) {
+  container.innerHTML = `
+    <div class="detail-section">
+      <div class="detail-label">🌍 World System</div>
+      <div class="detail-text">The game has 200 levels across 4 worlds. Every 50 levels, a new world unlocks with unique enemies, defenses, and bosses.<br><br>
+        🏢 World 1: The Office (1–50)<br>
+        🛍️ World 2: The Shopping Mall (51–100)<br>
+        ✈️ World 3: The Airport (101–150)<br>
+        🏚️ World 4: The Haunted Hotel (151–200)
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">👑 Boss Levels</div>
+      <div class="detail-text">A boss appears every 10 levels (10, 20, 30… 200). Each boss has a unique special ability that changes how the fight works. World bosses at levels 50, 100, 150, and 200 are especially dangerous — prepare accordingly.</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">😐😕😱😠 Mood System</div>
+      <div class="detail-text">Every enemy has a mood that changes based on their state:<br><br>
+        <strong>😐 Normal</strong> — Following basic behavior<br>
+        <strong>😕 Confused</strong> — Disoriented, may change direction<br>
+        <strong>😱 Panicked</strong> — Scared, moves slower and erratically<br>
+        <strong>😠 Focused</strong> — Ignores distractions (rare)<br><br>
+        Confused and panicked enemies are more vulnerable to Camera defenses!
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">👻 Phasing (Hotel)</div>
+      <div class="detail-text">Spectral enemies in the Haunted Hotel have a phasing behavior — a 50% chance to ignore any single defense they walk through. Layer defenses to compensate.</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">🧛 Revival (Hotel)</div>
+      <div class="detail-text">Some hotel enemies (Vampires, Vampire Lords) revive when defeated at a fraction of their max HP. You must defeat them a second time to truly eliminate them.</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">💰 Economy</div>
+      <div class="detail-text">Earn money three ways:<br>
+        • Starting points (scale with level)<br>
+        • +${50} after each wave is cleared<br>
+        • Half of enemy point value on defeat<br><br>
+        Accountant bosses reduce enemy income. Immigration desks cost more but can save your life.
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">⭐ Star Rating</div>
+      <div class="detail-text">
+        ⭐⭐⭐ = 8+ lives (Perfect!)<br>
+        ⭐⭐ = 5–7 lives (Good)<br>
+        ⭐ = 1–4 lives (Survived...)<br><br>
+        Earn 3 stars to prove you are the master of misdirection.
+      </div>
+    </div>
+  `;
+}
+
+function getEnemyBehaviorDescription(behavior) {
+  const d = {
+    random:      'Randomly changes direction while walking',
+    burst:       'Alternates between fast sprints and slow walking',
+    stops:       'Frequently stops — at signs, coffee, food, anything',
+    breaks:      'Destroys weak defenses in its path',
+    pushes:      'Pushes other enemies forward',
+    copy:        'Copies the behavior of nearby enemies',
+    follows:     'Follows the enemy directly in front of it',
+    immune:      'Ignores the first effect that hits it',
+    opposite:    'Does the opposite of what direction defenses tell it',
+    removes:     'Destroys placed defenses it encounters',
+    broadcasts:  'Boosts nearby enemy speed by proximity',
+    steady:      'Moves at constant speed — never confused, never panicked',
+    phasing:     '50% chance to pass through any defense without effect',
+    revives:     'Respawns once at 50% health when defeated',
+    healsAllies: 'Periodically heals nearby allies',
+    reducesRewards: 'Reduces money earned from nearby enemy defeats',
+  };
+  return d[behavior] || 'Unknown behavior — approach with curiosity';
+}
+
+// =================================================================
+// SECTION 11: GAMEPLAY STARTUP
+// =================================================================
+function startGameplay() {
+  showScreen('gameplay-screen');
+  if (window.game) game.cleanup();
+  const world = getWorld(currentLevelData.world);
+  applyWorldTheme(world.bodyClass);
+  document.getElementById('world-indicator').textContent = `${world.icon} ${world.name}`;
+  document.getElementById('goal-marker').textContent = world.laneGoal;
+  document.getElementById('spawn-marker').textContent = world.laneSpawn;
+  window.game = new Game(currentLevelData, gameData.selectedLoadout);
+}
+
+// =================================================================
+// SECTION 12: GAME CLASS
+// Core gameplay logic. For major behavior changes, edit methods here.
+// =================================================================
+class Game {
+  constructor(levelData, loadout) {
+    this.levelData  = levelData;
+    this.loadout    = loadout;
+    this.points     = levelData.startPoints;
+    this.currentWave = 1;
+    this.totalWaves  = levelData.waves;
+    this.lives       = 10;
+    this.score       = 0;
+    this.lanes       = [];
+    this.enemies     = [];
+    this.selectedTower = null;
+    this.waveActive    = false;
+    this.gameLoop      = null;
+    this.enemyIdCounter = 0;
+    this.gameSpeed     = 1;
+    this.paused        = false;
+    this.stats = { confused: 0, panicked: 0, defeated: 0 };
+    this.waveEnemyCount = 0;
+    this.waveEnemiesSpawned = 0;
+    this.init();
+  }
+
+  init() {
+    this.createLanes();
+    this.createToolbar();
+    this.updateUI();
+    this.startGameLoop();
+    setTimeout(() => this.startWave(), 1000);
+  }
+
+  createLanes() {
+    const container = document.getElementById('lanes-container');
+    container.innerHTML = '';
+    const laneCount   = 5;
+    const tilesPerLane = window.innerWidth < 768 ? 10 : 12;
+    for (let i = 0; i < laneCount; i++) {
+      const lane = document.createElement('div');
+      lane.className = 'lane';
+      lane.dataset.laneId = i;
+      const laneData = { id: i, tiles: [] };
+      for (let j = 0; j < tilesPerLane; j++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.dataset.laneId = i;
+        tile.dataset.tileId = j;
+        if (Math.random() < 0.05) tile.classList.add('broken');
+        tile.onclick = () => this.handleTileClick(i, j, tile);
+        lane.appendChild(tile);
+        laneData.tiles.push({ id: j, tower: null, element: tile, broken: tile.classList.contains('broken') });
+      }
+      container.appendChild(lane);
+      this.lanes.push(laneData);
+    }
+  }
+
+  createToolbar() {
+    const toolbar = document.getElementById('tower-bar');
+    toolbar.innerHTML = '';
+    this.loadout.forEach(defenseKey => {
+      const defense = DEFENSES[defenseKey];
+      if (!defense) return;
+      const btn = document.createElement('button');
+      btn.className = 'tower-btn';
+      btn.dataset.towerId = defenseKey;
+      btn.innerHTML = `<div class="tower-icon">${defense.icon}</div><div class="tower-name">${defense.name}</div><div class="tower-cost">$${defense.cost}</div>`;
+      btn.onclick = () => this.selectTower(defenseKey);
+      toolbar.appendChild(btn);
+    });
+  }
+
+  selectTower(towerId) {
+    if (this.paused) return;
+    this.selectedTower = this.selectedTower === towerId ? null : towerId;
+    document.querySelectorAll('.tower-btn').forEach(btn => btn.classList.remove('selected'));
+    if (this.selectedTower) {
+      const btn = document.querySelector(`[data-tower-id="${towerId}"]`);
+      if (btn) btn.classList.add('selected');
+    }
+  }
+
+  handleTileClick(laneId, tileId, tileElement) {
+    if (this.paused) return;
+    const tile = this.lanes[laneId].tiles[tileId];
+    if (tile.tower && !this.selectedTower) {
+      const defense = DEFENSES[tile.tower.type];
+      const refund = Math.floor(defense.cost * 0.7);
+      this.points += refund;
+      tile.tower = null;
+      tileElement.innerHTML = '';
+      this.showFloatingText(`+$${refund}`, tileElement);
+      this.updateUI();
+      return;
+    }
+    if (!this.selectedTower) return;
+    if (tile.broken || tile.tower) return;
+    const defense = DEFENSES[this.selectedTower];
+    if (this.points < defense.cost) return;
+    this.points -= defense.cost;
+    tile.tower = { type: this.selectedTower, uses: defense.uses || Infinity, triggered: false };
+    const towerDiv = document.createElement('div');
+    towerDiv.className = 'tower';
+    towerDiv.innerHTML = defense.icon;
+    tileElement.appendChild(towerDiv);
+    this.selectedTower = null;
+    document.querySelectorAll('.tower-btn').forEach(btn => btn.classList.remove('selected'));
+    this.updateUI();
+  }
+
+  // ---- Wave System ----
+  startWave() {
+    if (this.waveActive || this.currentWave > this.totalWaves) return;
+    this.waveActive = true;
+    this.spawnWave();
+  }
+
+  spawnWave() {
+    this.waveEnemiesSpawned = 0;
+    const isLastWave = this.currentWave === this.totalWaves;
+    const isBossLevel = this.levelData.boss;
+
+    if (isLastWave && isBossLevel) {
+      // Boss wave: spawn 1 boss in the centre lane
+      this.waveEnemyCount = 1;
+      const bossType = this.levelData.enemies[0];
+      const centreLane = Math.floor(this.lanes.length / 2);
+      this.spawnEnemy(centreLane, bossType);
+      this.waveEnemiesSpawned = 1;
+    } else if (isLastWave) {
+      // Rush wave: many enemies at once
+      const rushCount = Math.min(10 + Math.floor(this.levelData.id / 5), 30);
+      this.waveEnemyCount = rushCount;
+      for (let i = 0; i < rushCount; i++) {
+        setTimeout(() => {
+          if (this.lives <= 0) return;
+          const laneId = Math.floor(Math.random() * this.lanes.length);
+          const enemyType = this.levelData.enemies[Math.floor(Math.random() * this.levelData.enemies.length)];
+          this.spawnEnemy(laneId, enemyType);
+          this.waveEnemiesSpawned++;
+        }, i * 150);
+      }
+    } else {
+      // Normal wave: grows each wave
+      const count = Math.min(3 + (this.currentWave - 1) * 2, 16);
+      this.waveEnemyCount = count;
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          if (this.lives <= 0) return;
+          const laneId = Math.floor(Math.random() * this.lanes.length);
+          const enemyType = this.levelData.enemies[Math.floor(Math.random() * this.levelData.enemies.length)];
+          this.spawnEnemy(laneId, enemyType);
+          this.waveEnemiesSpawned++;
+        }, i * 800);
+      }
+    }
+  }
+
+  spawnEnemy(laneId, enemyType) {
+    const isBoss = this.levelData.boss;
+    const enemyData = isBoss ? BOSSES[enemyType] : ENEMIES[enemyType];
+    if (!enemyData) return;
+
+    // Track almanac encounters
+    if (isBoss && !gameData.encounteredBosses.includes(enemyType)) {
+      gameData.encounteredBosses.push(enemyType);
+      saveGameData();
+    } else if (!isBoss && !gameData.encounteredEnemies.includes(enemyType)) {
+      gameData.encounteredEnemies.push(enemyType);
+      saveGameData();
+    }
+
+    const scale = this.levelData.scaledHealth || 1;
+    const scaledHealth = Math.round(enemyData.health * scale);
+    const tilesCount = this.lanes[laneId].tiles.length;
+    const enemy = {
+      id: this.enemyIdCounter++,
+      type: enemyType,
+      isBoss,
+      lane: laneId,
+      position: tilesCount - 0.5,
+      health: scaledHealth,
+      maxHealth: scaledHealth,
+      speed: enemyData.speed * (this.levelData.scaledSpeed || 1),
+      direction: -1,
+      state: 'normal',
+      waitTime: 0,
+      icon: enemyData.icon,
+      mood: enemyData.mood,
+      behavior: enemyData.behavior,
+      revivedOnce: false,
+    };
+    this.enemies.push(enemy);
+    this.createEnemyElement(enemy);
+  }
+
+  createEnemyElement(enemy) {
+    const enemyDiv = document.createElement('div');
+    enemyDiv.className = 'enemy';
+    enemyDiv.id = `enemy-${enemy.id}`;
+    const isLargeBoss = enemy.isBoss && enemy.maxHealth >= 500;
+    if (isLargeBoss) enemyDiv.style.cssText = 'width:60px;height:60px;font-size:2.2rem;';
+    enemyDiv.innerHTML = `
+      ${enemy.icon}
+      <div class="mood-icon">${enemy.mood}</div>
+      <div class="health-bar ${enemy.isBoss ? 'boss-health' : ''}">
+        <div class="health-fill" style="width:100%"></div>
+      </div>
+    `;
+    const lane = document.querySelector(`[data-lane-id="${enemy.lane}"]`);
+    if (lane) lane.appendChild(enemyDiv);
+    this.updateEnemyPosition(enemy);
+  }
+
+  updateEnemyPosition(enemy) {
+    const enemyDiv = document.getElementById(`enemy-${enemy.id}`);
+    if (!enemyDiv) return;
+    const tileSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile-size'));
+    enemyDiv.style.left = `${enemy.position * tileSize + tileSize / 2}px`;
+    enemyDiv.className = `enemy ${enemy.state}`;
+    if (enemy.isBoss && enemy.maxHealth >= 500) enemyDiv.style.cssText = 'width:60px;height:60px;font-size:2.2rem;';
+    const moodIcon = enemyDiv.querySelector('.mood-icon');
+    if (moodIcon) {
+      if (enemy.state === 'confused') moodIcon.textContent = '😕';
+      else if (enemy.state === 'panicked') moodIcon.textContent = '😱';
+      else moodIcon.textContent = enemy.mood;
+    }
+    const healthFill = enemyDiv.querySelector('.health-fill');
+    if (healthFill) healthFill.style.width = `${(enemy.health / enemy.maxHealth) * 100}%`;
+  }
+
+  moveEnemies() {
+    if (this.paused) return;
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i];
+      if (enemy.waitTime > 0) { enemy.waitTime--; continue; }
+
+      // Phasing behavior: 50% chance to ignore defense tiles
+      const willPhase = enemy.behavior === 'phasing' && Math.random() < 0.5;
+
+      enemy.position += enemy.direction * enemy.speed * 0.05 * this.gameSpeed;
+      const currentTile = Math.floor(enemy.position);
+
+      if (!willPhase && currentTile >= 0 && currentTile < this.lanes[enemy.lane].tiles.length) {
+        const tile = this.lanes[enemy.lane].tiles[currentTile];
+        if (tile.tower && !tile.tower.triggered) {
+          this.applyTowerEffect(enemy, tile);
+          tile.tower.triggered = true;
+          setTimeout(() => { if (tile.tower) tile.tower.triggered = false; }, 500);
+        }
+      }
+
+      if (enemy.position < 0) {
+        this.lives--;
+        this.removeEnemy(i);
+        if (this.lives <= 0) this.gameOver(false);
+        continue;
+      }
+      if (enemy.position > this.lanes[enemy.lane].tiles.length) {
+        this.removeEnemy(i);
+        continue;
+      }
+      this.updateEnemyPosition(enemy);
+    }
+    if (this.waveActive && this.enemies.length === 0 && this.waveEnemiesSpawned >= this.waveEnemyCount) {
+      this.completeWave();
+    }
+  }
+
+  applyTowerEffect(enemy, tile) {
+    const defense = DEFENSES[tile.tower.type];
+    const tileEl = tile.element;
+    const effect = defense.effect;
+
+    // Rebel & Witch behaviors ignore/reverse direction effects
+    const reverses = enemy.behavior === 'opposite';
+
+    if (effect === 'flip' || effect === 'flipOnce') {
+      if (Math.random() < 0.4) {
+        enemy.direction *= reverses ? 1 : -1;
+        enemy.state = 'confused';
+        this.stats.confused++;
+      }
+      if (effect === 'flipOnce' && tile.tower.uses !== undefined) {
+        tile.tower.uses--;
+        if (tile.tower.uses <= 0) { tileEl.innerHTML = ''; tile.tower = null; }
+      }
+    } else if (effect === 'wait' || effect === 'queue' || effect === 'block' || effect === 'stuck') {
+      if (Math.random() < 0.6) {
+        enemy.waitTime = (defense.duration || 2) * 20;
+        enemy.state = 'confused';
+      }
+    } else if (effect === 'panic' || effect === 'slip' || effect === 'areaPanic') {
+      if (Math.random() < 0.5 && enemy.behavior !== 'steady' && enemy.behavior !== 'zombie') {
+        enemy.state = 'panicked';
+        enemy.speed *= 0.65;
+        this.stats.panicked++;
+      }
+    } else if (effect === 'knockback') {
+      this.damageEnemy(enemy, defense.damage || 20, tileEl);
+      enemy.position += 0.5;
+    } else if (effect === 'confusedDamage') {
+      if (enemy.state === 'confused' || enemy.state === 'panicked') {
+        this.damageEnemy(enemy, defense.damage || 10, tileEl);
+      }
+    } else if (effect === 'oneTime' || effect === 'drop') {
+      if (tile.tower.uses > 0) {
+        this.damageEnemy(enemy, defense.damage || 100, tileEl);
+        tile.tower.uses--;
+        if (tile.tower.uses <= 0) { tileEl.innerHTML = ''; tile.tower = null; }
+      }
+    } else if (effect === 'conveyor') {
+      enemy.position += 0.8; // push backward
+    } else if (effect === 'laneChange') {
+      const newLane = (enemy.lane + (Math.random() < 0.5 ? 1 : -1) + this.lanes.length) % this.lanes.length;
+      this.changeLane(enemy, newLane);
+    } else if (effect === 'random') {
+      const roll = Math.random();
+      if (roll < 0.33) { enemy.direction *= -1; enemy.state = 'confused'; }
+      else if (roll < 0.66) { enemy.waitTime = 30; }
+      else { enemy.speed *= 0.6; enemy.state = 'panicked'; }
+    } else if (effect === 'areaConfuse') {
+      this.enemies.forEach(e => { if (e.state !== 'confused') { e.state = 'confused'; this.stats.confused++; } });
+    }
+  }
+
+  changeLane(enemy, newLaneId) {
+    const enemyDiv = document.getElementById(`enemy-${enemy.id}`);
+    if (!enemyDiv) return;
+    enemyDiv.remove();
+    enemy.lane = newLaneId;
+    const newLane = document.querySelector(`[data-lane-id="${newLaneId}"]`);
+    if (newLane) newLane.appendChild(enemyDiv);
+  }
+
+  damageEnemy(enemy, damage, tileElement) {
+    // Immune behavior: ignore first hit
+    if (enemy.behavior === 'immune' && !enemy.immuneUsed) {
+      enemy.immuneUsed = true;
+      this.showFloatingText('BLOCKED!', tileElement, '#888');
+      return;
+    }
+    enemy.health -= damage;
+    if (tileElement) this.showFloatingText(`-${damage}`, tileElement, '#d94e28');
+
+    if (enemy.health <= 0) {
+      // Revive behavior
+      if ((enemy.behavior === 'revives') && !enemy.revivedOnce) {
+        enemy.revivedOnce = true;
+        enemy.health = Math.floor(enemy.maxHealth * 0.5);
+        this.showFloatingText('REVIVED!', tileElement, '#c040e0');
+        return;
+      }
+      const enemyData = enemy.isBoss ? BOSSES[enemy.type] : ENEMIES[enemy.type];
+      const pts = (enemyData?.points || 10) * (this.levelData.scaledPoints || 1);
+      this.score += pts;
+      const moneyGained = Math.floor(pts / 2);
+      this.points += moneyGained;
+      this.stats.defeated++;
+      const enemyDiv = document.getElementById(`enemy-${enemy.id}`);
+      if (enemyDiv?.parentElement) this.showFloatingText(`+$${moneyGained}`, enemyDiv.parentElement, '#4a7c59');
+      const index = this.enemies.findIndex(e => e.id === enemy.id);
+      if (index !== -1) this.removeEnemy(index);
+    }
+  }
+
+  removeEnemy(index) {
+    const enemy = this.enemies[index];
+    const enemyDiv = document.getElementById(`enemy-${enemy.id}`);
+    if (enemyDiv) {
+      enemyDiv.style.opacity = '0';
+      enemyDiv.style.transform = 'scale(0)';
+      setTimeout(() => enemyDiv.remove(), 200);
+    }
+    this.enemies.splice(index, 1);
+  }
+
+  completeWave() {
+    this.waveActive = false;
+    this.currentWave++;
+    this.points += 50;
+    this.waveEnemyCount = 0;
+    this.waveEnemiesSpawned = 0;
+    if (this.currentWave > this.totalWaves) this.gameOver(true);
+    else setTimeout(() => this.startWave(), 2000);
+    this.updateUI();
+  }
+
+  toggleSpeed() {
+    this.gameSpeed = this.gameSpeed === 1 ? 2 : 1;
+    document.getElementById('speed-btn').textContent = `${this.gameSpeed}×`;
+  }
+
+  pause()  { this.paused = true;  document.getElementById('pause-overlay').classList.add('active'); }
+  resume() { this.paused = false; document.getElementById('pause-overlay').classList.remove('active'); }
+  restart()    { this.cleanup(); startGameplay(); }
+  quitToMenu() { this.cleanup(); applyWorldTheme(''); showScreen('main-menu'); }
+
+  startGameLoop() {
+    this.gameLoop = setInterval(() => {
+      if (!this.paused) { this.moveEnemies(); this.updateUI(); }
+    }, 50);
+  }
+
+  updateUI() {
+    document.getElementById('points').textContent = this.points;
+    document.getElementById('wave-display').textContent = `${this.currentWave}/${this.totalWaves}`;
+    document.getElementById('lives').textContent = this.lives;
+    document.getElementById('score').textContent = this.score;
+    document.querySelectorAll('.tower-btn').forEach(btn => {
+      const defense = DEFENSES[btn.dataset.towerId];
+      if (defense) btn.classList.toggle('disabled', this.points < defense.cost);
+    });
+  }
+
+  showFloatingText(text, element, color) {
+    if (!element) return;
+    const div = document.createElement('div');
+    div.className = 'floating-text';
+    div.textContent = text;
+    div.style.left = '50%';
+    div.style.top = '20px';
+    div.style.color = color || (text.includes('+') ? '#4a7c59' : '#d94e28');
+    element.style.position = 'relative';
+    element.appendChild(div);
+    setTimeout(() => div.remove(), 1000);
+  }
+
+  gameOver(victory) {
+    clearInterval(this.gameLoop);
+    this.paused = true;
+    let stars = 0;
+    let newUnlocks = [];
+
+    if (victory) {
+      if (this.lives >= 8) stars = 3;
+      else if (this.lives >= 5) stars = 2;
+      else stars = 1;
+
+      if (!gameData.completedLevels.includes(this.levelData.id)) {
+        gameData.completedLevels.push(this.levelData.id);
+
+        // Unlock defenses
+        Object.entries(DEFENSES).forEach(([key, defense]) => {
+          if (defense.unlockLevel === this.levelData.id && !gameData.unlockedDefenses.includes(key)) {
+            gameData.unlockedDefenses.push(key);
+            newUnlocks.push({ type: 'defense', data: defense });
+          }
+        });
+
+        // Unlock next world at levels 50, 100, 150
+        const worldUnlockMap = { 50: 'mall', 100: 'airport', 150: 'hotel' };
+        if (worldUnlockMap[this.levelData.id] && !gameData.unlockedWorlds.includes(worldUnlockMap[this.levelData.id])) {
+          const newWorldId = worldUnlockMap[this.levelData.id];
+          gameData.unlockedWorlds.push(newWorldId);
+          newUnlocks.push({ type: 'world', data: WORLDS[newWorldId] });
+        }
+      }
+
+      const currentStars = gameData.levelStars[this.levelData.id] || 0;
+      if (stars > currentStars) gameData.levelStars[this.levelData.id] = stars;
+      saveGameData();
+      updateUIState();
+    }
+
+    document.getElementById('results-title').textContent = victory ? 'VICTORY!' : 'DEFEAT';
+    document.getElementById('results-title').className = victory ? 'results-title' : 'results-title defeat';
+    document.getElementById('stars-display').textContent = victory ? '⭐'.repeat(stars) : '💀';
+    document.getElementById('final-score').textContent = this.score;
+    document.getElementById('enemies-defeated').textContent = this.stats.defeated;
+    document.getElementById('confused-count').textContent = this.stats.confused;
+    document.getElementById('panicked-count').textContent = this.stats.panicked;
+
+    const unlockContainer = document.getElementById('unlock-notification-container');
+    unlockContainer.innerHTML = '';
+    newUnlocks.forEach(unlock => {
+      const notif = document.createElement('div');
+      notif.className = 'unlock-notification';
+      if (unlock.type === 'world') {
+        notif.innerHTML = `<div class="unlock-icon">🌍</div><div>NEW WORLD UNLOCKED!</div><div style="font-size:1.5rem;margin-top:8px;">${unlock.data.icon} ${unlock.data.name}</div><div style="font-size:0.85rem;margin-top:6px;opacity:0.9;">${unlock.data.unlockMsg}</div>`;
+      } else {
+        notif.innerHTML = `<div class="unlock-icon">🎉</div><div>NEW DEFENSE UNLOCKED!</div><div style="font-size:1.5rem;margin-top:8px;">${unlock.data.icon} ${unlock.data.name}</div>`;
+      }
+      unlockContainer.appendChild(notif);
+    });
+
+    showScreen('results-screen');
+  }
+
+  replay()     { this.cleanup(); loadLevel(this.levelData.id); }
+  nextLevel()  { this.cleanup(); const nextId = this.levelData.id + 1; if (LEVELS[nextId - 1]) loadLevel(nextId); else showScreen('level-select'); }
+  cleanup()    { if (this.gameLoop) clearInterval(this.gameLoop); document.querySelectorAll('.enemy').forEach(e => e.remove()); this.enemies = []; this.paused = false; }
+}
+
+// =================================================================
+// SECTION 13: BACKGROUND ANIMATION & INIT
+// =================================================================
+function initBackgroundAnimation() {
+  const bg = document.getElementById('bg-animation');
+  const enemyIcons = ['🚶','🏃','🤔','🧔','👯','🐑','🛍️','📸','👻','🧟','💀','📷','💼'];
+  for (let i = 0; i < 6; i++) {
+    const enemy = document.createElement('div');
+    enemy.className = 'bg-enemy';
+    enemy.textContent = enemyIcons[Math.floor(Math.random() * enemyIcons.length)];
+    enemy.style.top = `${15 + i * 14}%`;
+    enemy.style.animationDelay = `${i * 3.5}s`;
+    enemy.style.animationDuration = `${18 + i * 3}s`;
+    bg.appendChild(enemy);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadGameData();
+  initBackgroundAnimation();
+});
+</script>
+</body>
+</html>
